@@ -1,148 +1,130 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   collection,
-  deleteDoc,
-  doc,
   getDocs,
 } from "firebase/firestore";
 
 import { db } from "../lib/firebase";
 
-type Student = {
-  id: string;
-  name: string;
-  university: string;
-  career?: string;
-  area?: string;
-};
-
 export default function StudentsPage() {
-  const [students, setStudents] = useState<Student[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const [students, setStudents] = useState<any[]>([]);
 
   async function loadStudents() {
-    try {
-      const querySnapshot = await getDocs(
-        collection(db, "students")
-      );
-
-      const data = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as Omit<Student, "id">),
-      }));
-
-      setStudents(data);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleDelete(id: string) {
-    const confirmDelete = confirm(
-      "¿Eliminar alumno?"
+    const querySnapshot = await getDocs(
+      collection(db, "students")
     );
 
-    if (!confirmDelete) return;
+    const studentsData = querySnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
 
-    try {
-      await deleteDoc(doc(db, "students", id));
-
-      loadStudents();
-    } catch (error) {
-      console.error(error);
-    }
+    setStudents(studentsData);
   }
 
   useEffect(() => {
     loadStudents();
   }, []);
 
-  if (loading) {
-    return (
-      <div className="p-10 text-xl">
-        Cargando alumnos...
-      </div>
-    );
-  }
-
   return (
-    <div className="p-10">
-      <div className="flex items-center justify-between mb-8">
+    <div className="min-h-screen bg-[#F7F8FC] p-10">
+
+      {/* Header */}
+      <div className="flex items-center justify-between mb-10">
+
         <div>
-          <h1 className="text-5xl font-bold mb-2">
+          <h1 className="text-5xl font-bold text-[#1E293B]">
             Alumnos
           </h1>
 
-          <p className="text-gray-500">
+          <p className="text-gray-500 mt-3 text-lg">
             Gestión clínica de internos
           </p>
         </div>
 
-        <a
+        <Link
           href="/students/new"
-          className="bg-black text-white px-6 py-3 rounded-2xl"
+          className="bg-[#5B6CFF] hover:bg-[#4F46E5] transition text-white px-6 py-4 rounded-2xl font-medium shadow-sm"
         >
-          + Nuevo Alumno
-        </a>
+          + Nuevo alumno
+        </Link>
       </div>
 
-      <div className="bg-white rounded-3xl overflow-hidden border">
-        <table className="w-full">
-          <thead className="border-b bg-gray-50">
-            <tr className="text-left">
-              <th className="p-5">Alumno</th>
-              <th className="p-5">Universidad</th>
-              <th className="p-5">Carrera</th>
-              <th className="p-5">Área</th>
-              <th className="p-5">Acciones</th>
-            </tr>
-          </thead>
+      {/* Filtros */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
 
-          <tbody>
-            {students.map((student) => (
-              <tr
-                key={student.id}
-                className="border-b hover:bg-gray-50"
-              >
-                <td className="p-5">
-                  <a
-                    href={`/students/detail?id=${student.id}`}
-                    className="font-semibold text-black hover:underline"
-                  >
-                    {student.name}
-                  </a>
-                </td>
+        <input
+          placeholder="Buscar alumno..."
+          className="bg-white border border-gray-100 rounded-2xl px-5 py-4 outline-none shadow-sm"
+        />
 
-                <td className="p-5">
-                  {student.university || "-"}
-                </td>
+        <select className="bg-white border border-gray-100 rounded-2xl px-5 py-4 outline-none shadow-sm">
+          <option>TODAS</option>
+        </select>
 
-                <td className="p-5">
-                  {student.career || "Sin definir"}
-                </td>
+        <select className="bg-white border border-gray-100 rounded-2xl px-5 py-4 outline-none shadow-sm">
+          <option>TODOS</option>
+        </select>
 
-                <td className="p-5">
-                  {student.area || "General"}
-                </td>
+        <select className="bg-white border border-gray-100 rounded-2xl px-5 py-4 outline-none shadow-sm">
+          <option>TODAS</option>
+        </select>
+      </div>
 
-                <td className="p-5">
-                  <button
-                    onClick={() =>
-                      handleDelete(student.id)
-                    }
-                    className="bg-red-500 text-white px-4 py-2 rounded-xl"
-                  >
-                    Eliminar
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Tabla */}
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+
+        <div className="grid grid-cols-6 px-8 py-5 border-b border-gray-100 text-sm font-semibold text-gray-500">
+          <div>Alumno</div>
+          <div>Universidad</div>
+          <div>Área</div>
+          <div>Tutor</div>
+          <div>Promedio</div>
+          <div>Estado</div>
+        </div>
+
+        {students.map((student) => (
+
+          <Link
+            key={student.id}
+            href={`/students/${student.id}`}
+            className="grid grid-cols-6 px-8 py-6 border-b border-gray-50 hover:bg-[#FAFBFF] transition items-center"
+          >
+            <div className="font-semibold text-[#1E293B]">
+              {student.name}
+            </div>
+
+            <div className="text-gray-600">
+              {student.university || "-"}
+            </div>
+
+            <div>
+              <span className="bg-[#EEF0FF] text-[#5B6CFF] px-4 py-2 rounded-full text-sm font-medium">
+                {student.area || "General"}
+              </span>
+            </div>
+
+            <div className="text-gray-500">
+              {student.tutor || "-"}
+            </div>
+
+            <div className="font-semibold text-[#5B6CFF]">
+              {student.average || "-"}
+            </div>
+
+            <div>
+              <span className="bg-[#F0FDF4] text-green-700 px-4 py-2 rounded-full text-sm font-medium">
+                Activo
+              </span>
+            </div>
+          </Link>
+
+        ))}
+
       </div>
     </div>
   );
