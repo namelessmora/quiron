@@ -4,12 +4,6 @@ import { useEffect, useState } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 
-type Props = {
-  params: {
-    id: string;
-  };
-};
-
 type Student = {
   id: string;
   name: string;
@@ -18,13 +12,22 @@ type Student = {
   area?: string;
 };
 
-export default function StudentDetail({ params }: Props) {
+export default function StudentDetail({
+  params,
+}: {
+  params: { id: string };
+}) {
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
 
   async function loadStudent() {
     try {
-      const docRef = doc(db, "students", params.id);
+      const docRef = doc(
+        db,
+        "students",
+        String(params.id)
+      );
+
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
