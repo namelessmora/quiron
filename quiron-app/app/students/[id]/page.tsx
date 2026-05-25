@@ -10,6 +10,7 @@ import {
   getDocs,
   serverTimestamp,
   deleteDoc,
+  updateDoc,
 } from "firebase/firestore";
 
 import { db, auth } from "../../lib/firebase";
@@ -29,6 +30,7 @@ type Evaluation = {
   title: string;
   score: string;
   description?: string;
+  rubricLink?: string;
   createdBy?: string;
   createdAt?: any;
 };
@@ -51,6 +53,9 @@ export default function StudentDetail({
   const [showModal, setShowModal] =
     useState(false);
 
+  const [showEditModal, setShowEditModal] =
+    useState(false);
+
   const [title, setTitle] =
     useState("");
 
@@ -58,6 +63,24 @@ export default function StudentDetail({
     useState("");
 
   const [description, setDescription] =
+    useState("");
+
+  const [rubricLink, setRubricLink] =
+  useState("");
+
+  const [editName, setEditName] =
+    useState("");
+
+  const [editUniversity, setEditUniversity] =
+    useState("");
+
+  const [editCareer, setEditCareer] =
+    useState("");
+
+  const [editArea, setEditArea] =
+    useState("");
+
+  const [editTutor, setEditTutor] =
     useState("");
 
   useEffect(() => {
@@ -151,6 +174,7 @@ export default function StudentDetail({
           title,
           score,
           description,
+          rubricLink,
 
           createdBy:
             auth.currentUser?.email ||
@@ -161,11 +185,46 @@ export default function StudentDetail({
         }
       );
 
+      const currentEvaluations =
+        [...evaluations];
+
+      currentEvaluations.push({
+        id: crypto.randomUUID(),
+        title,
+        score,
+      });
+
+      const numericScores =
+        currentEvaluations.map((e) =>
+          Number(e.score)
+        );
+
+      const average =
+        numericScores.reduce(
+          (a, b) => a + b,
+          0
+        ) / numericScores.length;
+
+      await updateDoc(
+        doc(db, "students", student.id),
+        {
+          average:
+            average.toFixed(1),
+        }
+      );
+
+      setStudent({
+        ...student,
+        average:
+          average.toFixed(1),
+      });
+
       setShowModal(false);
 
       setTitle("");
       setScore("");
       setDescription("");
+      setRubricLink("");
 
       loadEvaluations(student.id);
 
@@ -200,7 +259,91 @@ export default function StudentDetail({
         )
       );
 
-      loadEvaluations(student.id);
+      const filtered =
+        evaluations.filter(
+          (evaluation) =>
+            evaluation.id !== evaluationId
+        );
+
+      setEvaluations(filtered);
+
+      if (filtered.length > 0) {
+
+        const numericScores =
+          filtered.map((e) =>
+            Number(e.score)
+          );
+
+        const average =
+          numericScores.reduce(
+            (a, b) => a + b,
+            0
+          ) / numericScores.length;
+
+        await updateDoc(
+          doc(db, "students", student.id),
+          {
+            average:
+              average.toFixed(1),
+          }
+        );
+
+        setStudent({
+          ...student,
+          average:
+            average.toFixed(1),
+        });
+
+      } else {
+
+        await updateDoc(
+          doc(db, "students", student.id),
+          {
+            average: "",
+          }
+        );
+
+        setStudent({
+          ...student,
+          average: "",
+        });
+
+      }
+
+    } catch (error) {
+
+      console.error(error);
+
+    }
+  }
+
+  async function handleUpdateStudent() {
+
+    if (!student) return;
+
+    try {
+
+      await updateDoc(
+        doc(db, "students", student.id),
+        {
+          name: editName,
+          university: editUniversity,
+          career: editCareer,
+          area: editArea,
+          tutor: editTutor,
+        }
+      );
+
+      setStudent({
+        ...student,
+        name: editName,
+        university: editUniversity,
+        career: editCareer,
+        area: editArea,
+        tutor: editTutor,
+      });
+
+      setShowEditModal(false);
 
     } catch (error) {
 
@@ -231,9 +374,52 @@ export default function StudentDetail({
 
     <div className="p-10 max-w-5xl">
 
-      <h1 className="text-6xl font-bold text-[#1E293B] mb-4">
-        {student.name}
-      </h1>
+      <div className="flex items-center justify-between mb-8">
+
+        <div>
+
+          <h1 className="text-6xl font-bold text-[#1E293B] mb-4">
+            {student.name}
+          </h1>
+
+          <p className="text-gray-500 text-xl">
+            Perfil clínico del alumno
+          </p>
+
+        </div>
+
+        <button
+          onClick={() => {
+
+            setEditName(
+              student.name || ""
+            );
+
+            setEditUniversity(
+              student.university || ""
+            );
+
+            setEditCareer(
+              student.career || ""
+            );
+
+            setEditArea(
+              student.area || ""
+            );
+
+            setEditTutor(
+              student.tutor || ""
+            );
+
+            setShowEditModal(true);
+
+          }}
+          className="bg-white border border-gray-200 hover:border-[#5B6CFF] text-[#1E293B] px-6 py-4 rounded-3xl transition font-semibold"
+        >
+          Editar alumno
+        </button>
+
+      </div>
 
       <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm mb-8">
 
@@ -285,6 +471,18 @@ export default function StudentDetail({
 
             <p className="text-2xl font-semibold text-[#1E293B]">
               {student.tutor || "-"}
+            </p>
+
+          </div>
+
+          <div>
+
+            <p className="text-gray-400 mb-1">
+              Promedio
+            </p>
+
+            <p className="text-2xl font-semibold text-[#5B6CFF]">
+              {student.average || "-"}
             </p>
 
           </div>
@@ -458,6 +656,113 @@ export default function StudentDetail({
                 className="bg-[#5B6CFF] hover:bg-[#4C5DF5] text-white px-6 py-3 rounded-2xl transition"
               >
                 Guardar
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      )}
+
+      {showEditModal && (
+
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+
+          <div className="bg-white rounded-3xl p-8 w-full max-w-xl">
+
+            <h2 className="text-3xl font-bold mb-6 text-[#1E293B]">
+              Editar alumno
+            </h2>
+
+            <div className="grid gap-4">
+
+              <input
+                placeholder="Nombre"
+                value={editName}
+                onChange={(e) =>
+                  setEditName(
+                    e.target.value
+                  )
+                }
+                className="border border-gray-200 rounded-2xl px-5 py-4"
+              />
+
+              <input
+                placeholder="Universidad"
+                value={editUniversity}
+                onChange={(e) =>
+                  setEditUniversity(
+                    e.target.value
+                  )
+                }
+                className="border border-gray-200 rounded-2xl px-5 py-4"
+              />
+
+              <input
+                placeholder="Carrera"
+                value={editCareer}
+                onChange={(e) =>
+                  setEditCareer(
+                    e.target.value
+                  )
+                }
+                className="border border-gray-200 rounded-2xl px-5 py-4"
+              />
+
+              <input
+                placeholder="Área"
+                value={editArea}
+                onChange={(e) =>
+                  setEditArea(
+                    e.target.value
+                  )
+                }
+                className="border border-gray-200 rounded-2xl px-5 py-4"
+              />
+
+              <input
+                placeholder="Tutor"
+                value={editTutor}
+                onChange={(e) =>
+                  setEditTutor(
+                    e.target.value
+                  )
+                }
+                className="border border-gray-200 rounded-2xl px-5 py-4"
+              />
+
+              <input
+                  placeholder="Link rúbrica"
+                  value={rubricLink}
+                 onChange={(e) =>
+                   setRubricLink(
+                    e.target.value
+                   )
+                 }
+                  className="border border-gray-200 rounded-2xl px-5 py-4"
+               />
+            </div>
+
+            <div className="flex items-center justify-end gap-4 mt-8">
+
+              <button
+                onClick={() =>
+                  setShowEditModal(false)
+                }
+                className="px-5 py-3 rounded-2xl bg-gray-100"
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={
+                  handleUpdateStudent
+                }
+                className="bg-[#5B6CFF] hover:bg-[#4C5DF5] text-white px-6 py-3 rounded-2xl transition"
+              >
+                Guardar cambios
               </button>
 
             </div>
