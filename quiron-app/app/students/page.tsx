@@ -1,44 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-import Link from "next/link";
-
-import {
-  collection,
-  getDocs,
-} from "firebase/firestore";
-
+import { collection, getDocs } from "firebase/firestore";
 import { db } from "../lib/firebase";
 
-import StudentModal from "../components/StudentModal";
-
 type Student = {
-  id?: string;
+  id: string;
   name: string;
   university: string;
-  career: string;
-  areas: string[];
+  career?: string;
+  area?: string;
 };
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-
-  useEffect(() => {
-    loadStudents();
-  }, []);
 
   async function loadStudents() {
     try {
-      const querySnapshot = await getDocs(
-        collection(db, "students")
-      );
+      const querySnapshot = await getDocs(collection(db, "students"));
 
       const data = querySnapshot.docs.map((doc) => ({
         id: doc.id,
-        ...(doc.data() as Student),
+        ...(doc.data() as Omit<Student, "id">),
       }));
 
       setStudents(data);
@@ -47,6 +31,18 @@ export default function StudentsPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  useEffect(() => {
+    loadStudents();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="p-10 text-xl">
+        Cargando alumnos...
+      </div>
+    );
   }
 
   return (
@@ -62,85 +58,56 @@ export default function StudentsPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => setShowModal(true)}
+        <a
+          href="/students/new"
           className="bg-black text-white px-6 py-3 rounded-2xl"
         >
           + Nuevo Alumno
-        </button>
+        </a>
       </div>
 
-      <div className="bg-white rounded-3xl overflow-hidden shadow">
+      <div className="bg-white rounded-3xl overflow-hidden border">
         <table className="w-full">
-          <thead className="border-b">
+          <thead className="border-b bg-gray-50">
             <tr className="text-left">
-              <th className="p-4">
-                Nombre
-              </th>
-
-              <th className="p-4">
-                Universidad
-              </th>
-
-              <th className="p-4">
-                Carrera
-              </th>
-
-              <th className="p-4">
-                Áreas
-              </th>
+              <th className="p-5">Alumno</th>
+              <th className="p-5">Universidad</th>
+              <th className="p-5">Carrera</th>
+              <th className="p-5">Área</th>
             </tr>
           </thead>
 
           <tbody>
-            {loading ? (
-              <tr>
-                <td className="p-4">
-                  Cargando...
+            {students.map((student) => (
+              <tr
+                key={student.id}
+                className="border-b hover:bg-gray-50"
+              >
+                <td className="p-5">
+                  <a
+                    href={`/students/${student.id}`}
+                    className="font-semibold text-black hover:underline"
+                  >
+                    {student.name}
+                  </a>
+                </td>
+
+                <td className="p-5">
+                  {student.university || "-"}
+                </td>
+
+                <td className="p-5">
+                  {student.career || "Sin definir"}
+                </td>
+
+                <td className="p-5">
+                  {student.area || "General"}
                 </td>
               </tr>
-            ) : (
-              students.map((student) => (
-                <tr
-                  key={student.id}
-                  className="border-b hover:bg-gray-50"
-                >
-                  <td className="p-4">
-                    <Link
-                      href={`/students/${student.id}`}
-                      className="text-blue-600 font-semibold"
-                    >
-                      {student.name}
-                    </Link>
-                  </td>
-
-                  <td className="p-4 text-gray-600">
-                    {student.university}
-                  </td>
-
-                  <td className="p-4 text-gray-600">
-                    {student.career}
-                  </td>
-
-                  <td className="p-4 text-gray-600">
-                    {student.areas?.join(", ")}
-                  </td>
-                </tr>
-              ))
-            )}
+            ))}
           </tbody>
         </table>
       </div>
-
-      {showModal && (
-        <StudentModal
-          onClose={() => setShowModal(false)}
-          onSaved={() => {
-            loadStudents();
-            setShowModal(false);
-          }}
-        />
-      )}
     </div>
   );
 }
