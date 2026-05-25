@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import Link from "next/link";
+
 import {
   collection,
   getDocs,
@@ -72,10 +74,21 @@ export default function StudentsPage() {
         <table className="w-full">
           <thead className="border-b">
             <tr className="text-left">
-              <th className="p-4">Nombre</th>
-              <th className="p-4">Universidad</th>
-              <th className="p-4">Carrera</th>
-              <th className="p-4">Áreas</th>
+              <th className="p-4">
+                Nombre
+              </th>
+
+              <th className="p-4">
+                Universidad
+              </th>
+
+              <th className="p-4">
+                Carrera
+              </th>
+
+              <th className="p-4">
+                Áreas
+              </th>
             </tr>
           </thead>
 
@@ -90,10 +103,15 @@ export default function StudentsPage() {
               students.map((student) => (
                 <tr
                   key={student.id}
-                  className="border-b"
+                  className="border-b hover:bg-gray-50"
                 >
                   <td className="p-4">
-                    {student.name}
+                    <Link
+                      href={`/students/${student.id}`}
+                      className="text-blue-600 font-semibold"
+                    >
+                      {student.name}
+                    </Link>
                   </td>
 
                   <td className="p-4 text-gray-600">
