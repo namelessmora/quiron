@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+} from "firebase/firestore";
+
 import { db } from "../lib/firebase";
 
 type Student = {
@@ -18,7 +24,9 @@ export default function StudentsPage() {
 
   async function loadStudents() {
     try {
-      const querySnapshot = await getDocs(collection(db, "students"));
+      const querySnapshot = await getDocs(
+        collection(db, "students")
+      );
 
       const data = querySnapshot.docs.map((doc) => ({
         id: doc.id,
@@ -30,6 +38,22 @@ export default function StudentsPage() {
       console.error(error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    const confirmDelete = confirm(
+      "¿Eliminar alumno?"
+    );
+
+    if (!confirmDelete) return;
+
+    try {
+      await deleteDoc(doc(db, "students", id));
+
+      loadStudents();
+    } catch (error) {
+      console.error(error);
     }
   }
 
@@ -74,6 +98,7 @@ export default function StudentsPage() {
               <th className="p-5">Universidad</th>
               <th className="p-5">Carrera</th>
               <th className="p-5">Área</th>
+              <th className="p-5">Acciones</th>
             </tr>
           </thead>
 
@@ -85,7 +110,7 @@ export default function StudentsPage() {
               >
                 <td className="p-5">
                   <a
-                    href={`/students/${student.id}`}
+                    href={`/students/detail?id=${student.id}`}
                     className="font-semibold text-black hover:underline"
                   >
                     {student.name}
@@ -102,6 +127,17 @@ export default function StudentsPage() {
 
                 <td className="p-5">
                   {student.area || "General"}
+                </td>
+
+                <td className="p-5">
+                  <button
+                    onClick={() =>
+                      handleDelete(student.id)
+                    }
+                    className="bg-red-500 text-white px-4 py-2 rounded-xl"
+                  >
+                    Eliminar
+                  </button>
                 </td>
               </tr>
             ))}
