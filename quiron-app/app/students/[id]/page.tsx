@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import jsPDF from "jspdf";
 
 import {
   doc,
@@ -36,6 +37,40 @@ type Evaluation = {
   createdBy?: string;
   createdAt?: Timestamp | { seconds?: number };
 };
+
+function formatEvaluationDate(
+  value: Evaluation["createdAt"]
+) {
+
+  if (!value) return "Fecha pendiente";
+
+  if (value instanceof Timestamp) {
+    return value.toDate().toLocaleDateString(
+      "es-CL"
+    );
+  }
+
+  if (
+    "seconds" in value &&
+    typeof value.seconds === "number"
+  ) {
+    return new Date(
+      value.seconds * 1000
+    ).toLocaleDateString("es-CL");
+  }
+
+  return "Fecha pendiente";
+}
+
+function fileSafeName(value: string) {
+
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
+}
 
 export default function StudentDetail({
   params,
@@ -493,6 +528,228 @@ export default function StudentDetail({
     }
   }
 
+  function handleExportPdf() {
+
+    if (!student) return;
+
+    const pdf = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    });
+
+    const pageWidth =
+      pdf.internal.pageSize.getWidth();
+
+    const pageHeight =
+      pdf.internal.pageSize.getHeight();
+
+    const margin = 18;
+    const contentWidth =
+      pageWidth - margin * 2;
+
+    let cursorY = 20;
+
+    function addPageIfNeeded(
+      neededHeight = 12
+    ) {
+
+      if (
+        cursorY + neededHeight >
+        pageHeight - margin
+      ) {
+        pdf.addPage();
+        cursorY = 20;
+      }
+    }
+
+    function addText(
+      text: string,
+      options: {
+        size?: number;
+        style?: "normal" | "bold";
+        color?: [number, number, number];
+        gap?: number;
+      } = {}
+    ) {
+
+      const {
+        size = 10,
+        style = "normal",
+        color = [30, 41, 59],
+        gap = 6,
+      } = options;
+
+      pdf.setFont("helvetica", style);
+      pdf.setFontSize(size);
+      pdf.setTextColor(...color);
+
+      const lines = pdf.splitTextToSize(
+        text || "-",
+        contentWidth
+      );
+
+      const lineHeight = size * 0.42;
+      addPageIfNeeded(
+        lines.length * lineHeight + gap
+      );
+
+      pdf.text(lines, margin, cursorY);
+      cursorY +=
+        lines.length * lineHeight + gap;
+    }
+
+    function addDivider() {
+
+      addPageIfNeeded(8);
+      pdf.setDrawColor(226, 232, 240);
+      pdf.line(
+        margin,
+        cursorY,
+        pageWidth - margin,
+        cursorY
+      );
+      cursorY += 8;
+    }
+
+    addText("Informe clínico académico", {
+      size: 18,
+      style: "bold",
+      color: [79, 70, 229],
+      gap: 8,
+    });
+
+    addText(student.name, {
+      size: 15,
+      style: "bold",
+      gap: 8,
+    });
+
+    addDivider();
+
+    addText("Información del alumno", {
+      size: 13,
+      style: "bold",
+      gap: 6,
+    });
+
+    [
+      ["Universidad", student.university],
+      ["Carrera", student.career || "Sin definir"],
+      ["Área", student.area || "General"],
+      ["Tutor", student.tutor || "-"],
+      ["Promedio", student.average || "-"],
+    ].forEach(([label, value]) => {
+      addText(`${label}: ${value}`, {
+        size: 10,
+        gap: 4,
+      });
+    });
+
+    addText(
+      `Observaciones generales: ${
+        student.observations ||
+        "Sin observaciones registradas"
+      }`,
+      {
+        size: 10,
+        gap: 8,
+      }
+    );
+
+    addDivider();
+
+    addText("Evaluaciones", {
+      size: 13,
+      style: "bold",
+      gap: 6,
+    });
+
+    if (evaluations.length === 0) {
+      addText("Sin evaluaciones registradas.", {
+        color: [100, 116, 139],
+      });
+    }
+
+    evaluations.forEach(
+      (evaluation, index) => {
+
+        addPageIfNeeded(34);
+
+        addText(
+          `${index + 1}. ${
+            evaluation.title ||
+            "Evaluación sin título"
+          }`,
+          {
+            size: 11,
+            style: "bold",
+            gap: 5,
+          }
+        );
+
+        addText(`Nota: ${evaluation.score || "-"}`, {
+          size: 10,
+          gap: 4,
+        });
+
+        addText(
+          `Fecha: ${formatEvaluationDate(
+            evaluation.createdAt
+          )}`,
+          {
+            size: 10,
+            gap: 4,
+          }
+        );
+
+        addText(
+          `Registrada por: ${
+            evaluation.createdBy || "Usuario"
+          }`,
+          {
+            size: 10,
+            gap: 4,
+          }
+        );
+
+        addText(
+          `Comentarios: ${
+            evaluation.description ||
+            "Sin comentarios"
+          }`,
+          {
+            size: 10,
+            gap: 4,
+          }
+        );
+
+        if (evaluation.rubricLink) {
+          addText(
+            `Rúbrica: ${evaluation.rubricLink}`,
+            {
+              size: 10,
+              color: [79, 70, 229],
+              gap: 4,
+            }
+          );
+        }
+
+        if (index < evaluations.length - 1) {
+          cursorY += 3;
+          addDivider();
+        }
+
+      }
+    );
+
+    pdf.save(
+      `informe-${fileSafeName(
+        student.name
+      )}.pdf`
+    );
+  }
+
   if (loading) {
 
     return (
@@ -529,39 +786,52 @@ export default function StudentDetail({
 
         </div>
 
-        <button
-          onClick={() => {
+        <div className="flex items-center gap-3">
 
-            setEditName(
-              student.name || ""
-            );
+          <button
+            onClick={
+              handleExportPdf
+            }
+            className="bg-[#5B6CFF] hover:bg-[#4C5DF5] text-white px-6 py-4 rounded-3xl transition font-semibold"
+          >
+            Exportar PDF
+          </button>
 
-            setEditUniversity(
-              student.university || ""
-            );
+          <button
+            onClick={() => {
 
-            setEditCareer(
-              student.career || ""
-            );
+              setEditName(
+                student.name || ""
+              );
 
-            setEditArea(
-              student.area || ""
-            );
+              setEditUniversity(
+                student.university || ""
+              );
 
-            setEditTutor(
-              student.tutor || ""
-            );
+              setEditCareer(
+                student.career || ""
+              );
 
-            setEditObservations(
-              student.observations || ""
-            );
-            setShowEditModal(true);
+              setEditArea(
+                student.area || ""
+              );
 
-          }}
-          className="bg-white border border-gray-200 hover:border-[#5B6CFF] text-[#1E293B] px-6 py-4 rounded-3xl transition font-semibold"
-        >
-          Editar alumno
-        </button>
+              setEditTutor(
+                student.tutor || ""
+              );
+
+              setEditObservations(
+                student.observations || ""
+              );
+              setShowEditModal(true);
+
+            }}
+            className="bg-white border border-gray-200 hover:border-[#5B6CFF] text-[#1E293B] px-6 py-4 rounded-3xl transition font-semibold"
+          >
+            Editar alumno
+          </button>
+
+        </div>
 
       </div>
 
