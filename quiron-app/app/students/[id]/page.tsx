@@ -23,6 +23,7 @@ type Student = {
   area?: string;
   tutor?: string;
   average?: string;
+  observations?: string;
 };
 
 type Evaluation = {
@@ -82,6 +83,11 @@ export default function StudentDetail({
 
   const [editTutor, setEditTutor] =
     useState("");
+
+  const [
+  editObservations,
+  setEditObservations,
+] = useState("");
 
   useEffect(() => {
     loadStudent();
@@ -331,6 +337,8 @@ export default function StudentDetail({
           career: editCareer,
           area: editArea,
           tutor: editTutor,
+          observations:
+ editObservations,
         }
       );
 
@@ -341,6 +349,8 @@ export default function StudentDetail({
         career: editCareer,
         area: editArea,
         tutor: editTutor,
+        observations:
+           editObservations,
       });
 
       setShowEditModal(false);
@@ -411,6 +421,9 @@ export default function StudentDetail({
               student.tutor || ""
             );
 
+            setEditObservations(
+              student.observations || ""
+            );
             setShowEditModal(true);
 
           }}
@@ -486,7 +499,22 @@ export default function StudentDetail({
             </p>
 
           </div>
+<div className="col-span-2">
 
+  <p className="text-gray-400 mb-1">
+    Observaciones generales
+  </p>
+
+  <div className="bg-[#F8FAFC] rounded-2xl p-5 mt-2">
+
+    <p className="text-[#1E293B] leading-relaxed whitespace-pre-wrap">
+      {student.observations ||
+        "Sin observaciones registradas"}
+    </p>
+
+  </div>
+
+</div>
         </div>
 
       </div>
@@ -581,7 +609,17 @@ export default function StudentDetail({
                   {evaluation.description ||
                     "Sin comentarios"}
                 </p>
+{evaluation.rubricLink && (
 
+  <a
+    href={evaluation.rubricLink}
+    target="_blank"
+    className="inline-flex items-center gap-2 mt-5 text-[#5B6CFF] font-semibold hover:underline"
+  >
+    📄 Ver rúbrica
+  </a>
+
+)}
               </div>
 
             )
@@ -732,7 +770,16 @@ export default function StudentDetail({
                 }
                 className="border border-gray-200 rounded-2xl px-5 py-4"
               />
-
+<textarea
+  placeholder="Observaciones generales"
+  value={editObservations}
+  onChange={(e) =>
+    setEditObservations(
+      e.target.value
+    )
+  }
+  className="border border-gray-200 rounded-2xl px-5 py-4 min-h-[140px]"
+/>
               <input
                   placeholder="Link rúbrica"
                   value={rubricLink}
