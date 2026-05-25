@@ -10,7 +10,7 @@ import {
   doc,
 } from "firebase/firestore";
 
-import { db } from "../../lib/firebase";
+import { db } from "../lib/firebase";
 
 type Student = {
   id: string;
@@ -23,6 +23,7 @@ type Student = {
 };
 
 export default function StudentsPage() {
+
   const [students, setStudents] = useState<Student[]>([]);
 
   useEffect(() => {
@@ -30,6 +31,7 @@ export default function StudentsPage() {
   }, []);
 
   async function loadStudents() {
+
     const snapshot = await getDocs(
       collection(db, "students")
     );
@@ -42,9 +44,8 @@ export default function StudentsPage() {
     setStudents(data);
   }
 
-  async function handleDeleteStudent(
-    id: string
-  ) {
+  async function handleDeleteStudent(id: string) {
+
     const confirmDelete = confirm(
       "¿Eliminar alumno?"
     );
@@ -59,11 +60,13 @@ export default function StudentsPage() {
   }
 
   return (
+
     <div className="p-10">
 
       <div className="flex items-center justify-between mb-10">
 
         <div>
+
           <h1 className="text-6xl font-bold text-[#1E293B]">
             Alumnos
           </h1>
@@ -71,6 +74,7 @@ export default function StudentsPage() {
           <p className="text-gray-500 mt-2 text-xl">
             Gestión clínica de internos
           </p>
+
         </div>
 
         <Link
@@ -113,9 +117,11 @@ export default function StudentsPage() {
                   </div>
 
                   {student.tutor && (
+
                     <div className="bg-[#ECFDF3] text-green-700 px-4 py-2 rounded-2xl text-sm">
                       Tutor: {student.tutor}
                     </div>
+
                   )}
 
                 </div>
@@ -138,9 +144,7 @@ export default function StudentsPage() {
 
                 <button
                   onClick={() =>
-                    handleDeleteStudent(
-                      student.id
-                    )
+                    handleDeleteStudent(student.id)
                   }
                   className="bg-red-50 hover:bg-red-100 text-red-500 px-5 py-3 rounded-2xl transition"
                 >
@@ -158,5 +162,6 @@ export default function StudentsPage() {
       </div>
 
     </div>
+
   );
 }

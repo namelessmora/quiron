@@ -5,17 +5,14 @@ import { useEffect, useState } from "react";
 import {
   doc,
   getDoc,
-  updateDoc,
-  deleteDoc,
-  addDoc,
   collection,
+  addDoc,
   getDocs,
   serverTimestamp,
+  deleteDoc,
 } from "firebase/firestore";
 
 import { db, auth } from "../../lib/firebase";
-
-import { useRouter } from "next/navigation";
 
 type Student = {
   id: string;
@@ -42,8 +39,6 @@ export default function StudentDetail({
   params: Promise<{ id: string }>;
 }) {
 
-  const router = useRouter();
-
   const [student, setStudent] =
     useState<Student | null>(null);
 
@@ -53,113 +48,142 @@ export default function StudentDetail({
   const [loading, setLoading] =
     useState(true);
 
-  const [saving, setSaving] =
+  const [showModal, setShowModal] =
     useState(false);
 
+  const [title, setTitle] =
+    useState("");
+
+  const [score, setScore] =
+    useState("");
+
+  const [description, setDescription] =
+    useState("");
+
   useEffect(() => {
-
-    async function loadStudent() {
-
-      try {
-
-        const resolvedParams =
-          await params;
-
-        const docRef = doc(
-          db,
-          "students",
-          resolvedParams.id
-        );
-
-        const docSnap =
-          await getDoc(docRef);
-
-        if (docSnap.exists()) {
-
-          const studentData = {
-            id: docSnap.id,
-            ...(docSnap.data() as Omit<Student, "id">),
-          };
-
-          setStudent(studentData);
-
-          const evaluationsSnapshot =
-            await getDocs(
-              collection(
-                db,
-                "students",
-                resolvedParams.id,
-                "evaluations"
-              )
-            );
-
-          const evaluationsData =
-            evaluationsSnapshot.docs.map(
-              (doc) => ({
-                id: doc.id,
-                ...doc.data(),
-              })
-            ) as Evaluation[];
-
-          setEvaluations(evaluationsData);
-        }
-
-      } catch (error) {
-
-        console.error(error);
-
-      } finally {
-
-        setLoading(false);
-      }
-    }
-
     loadStudent();
+  }, []);
 
-  }, [params]);
-
-  async function handleSave() {
-
-    if (!student) return;
+  async function loadStudent() {
 
     try {
 
-      setSaving(true);
+      const resolvedParams =
+        await params;
 
       const docRef = doc(
         db,
         "students",
-        student.id
+        resolvedParams.id
       );
 
-      await updateDoc(docRef, {
-        name: student.name,
-        university: student.university,
-        career: student.career || "",
-        area: student.area || "",
-        tutor: student.tutor || "",
-      });
+      const docSnap =
+        await getDoc(docRef);
 
-      alert("Alumno actualizado ✨");
+      if (docSnap.exists()) {
+
+        const studentData = {
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<
+            Student,
+            "id"
+          >),
+        };
+
+        setStudent(studentData);
+
+        loadEvaluations(
+          resolvedParams.id
+        );
+      }
 
     } catch (error) {
 
       console.error(error);
 
-      alert("Error al guardar");
-
     } finally {
 
-      setSaving(false);
+      setLoading(false);
+
     }
   }
 
-  async function handleDelete() {
+  async function loadEvaluations(
+    studentId: string
+  ) {
+
+    const snapshot = await getDocs(
+      collection(
+        db,
+        "students",
+        studentId,
+        "evaluations"
+      )
+    );
+
+    const data = snapshot.docs.map(
+      (doc) => ({
+        id: doc.id,
+        ...(doc.data() as Omit<
+          Evaluation,
+          "id"
+        >),
+      })
+    );
+
+    setEvaluations(data);
+  }
+
+  async function handleAddEvaluation() {
+
+    if (!student) return;
+
+    try {
+
+      await addDoc(
+        collection(
+          db,
+          "students",
+          student.id,
+          "evaluations"
+        ),
+        {
+          title,
+          score,
+          description,
+
+          createdBy:
+            auth.currentUser?.email ||
+            "Usuario",
+
+          createdAt:
+            serverTimestamp(),
+        }
+      );
+
+      setShowModal(false);
+
+      setTitle("");
+      setScore("");
+      setDescription("");
+
+      loadEvaluations(student.id);
+
+    } catch (error) {
+
+      console.error(error);
+
+    }
+  }
+
+  async function handleDeleteEvaluation(
+    evaluationId: string
+  ) {
 
     if (!student) return;
 
     const confirmDelete = confirm(
-      "¿Eliminar alumno?"
+      "¿Eliminar evaluación?"
     );
 
     if (!confirmDelete) return;
@@ -167,125 +191,26 @@ export default function StudentDetail({
     try {
 
       await deleteDoc(
-        doc(db, "students", student.id)
-      );
-
-      router.push("/students");
-
-    } catch (error) {
-
-      console.error(error);
-
-      alert("Error al eliminar");
-    }
-  }
-
-  async function handleNewEvaluation() {
-
-    if (!student) return;
-
-    const title =
-      prompt("Nombre evaluación");
-
-    if (!title) return;
-
-    const score =
-      prompt("Nota");
-
-    if (!score) return;
-
-    const description =
-      prompt("Comentario evaluación");
-
-    try {
-
-      await addDoc(
-
-        collection(
+        doc(
           db,
           "students",
           student.id,
-          "evaluations"
-        ),
-
-        {
-          title,
-          score,
-          description: description || "",
-          createdBy:
-            auth.currentUser?.email ||
-            "Desconocido",
-          createdAt:
-            serverTimestamp(),
-        }
-
+          "evaluations",
+          evaluationId
+        )
       );
 
-      const currentEvaluations =
-        [...evaluations];
-
-      currentEvaluations.push({
-        id: crypto.randomUUID(),
-        title,
-        score,
-      });
-
-      const numericScores =
-        currentEvaluations.map((e) =>
-          Number(e.score)
-        );
-
-      const average =
-        numericScores.reduce(
-          (a, b) => a + b,
-          0
-        ) / numericScores.length;
-
-      await updateDoc(
-        doc(db, "students", student.id),
-        {
-          average:
-            average.toFixed(1),
-        }
-      );
-
-      const evaluationsSnapshot =
-        await getDocs(
-          collection(
-            db,
-            "students",
-            student.id,
-            "evaluations"
-          )
-        );
-
-      const evaluationsData =
-        evaluationsSnapshot.docs.map(
-          (doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          })
-        ) as Evaluation[];
-
-      setEvaluations(evaluationsData);
-
-      setStudent({
-        ...student,
-        average:
-          average.toFixed(1),
-      });
+      loadEvaluations(student.id);
 
     } catch (error) {
 
       console.error(error);
 
-      alert(
-        "Error al crear evaluación"
-      );
     }
   }
 
   if (loading) {
+
     return (
       <div className="p-10">
         Cargando alumno...
@@ -294,6 +219,7 @@ export default function StudentDetail({
   }
 
   if (!student) {
+
     return (
       <div className="p-10">
         Alumno no encontrado
@@ -302,169 +228,100 @@ export default function StudentDetail({
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F8FC] p-10">
 
-      <div className="mb-10">
+    <div className="p-10 max-w-5xl">
 
-        <h1 className="text-5xl font-bold text-[#1E293B]">
-          {student.name}
-        </h1>
+      <h1 className="text-6xl font-bold text-[#1E293B] mb-4">
+        {student.name}
+      </h1>
 
-        <p className="text-gray-500 mt-3 text-lg">
-          Perfil clínico del alumno
-        </p>
+      <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm mb-8">
 
-      </div>
-
-      <div className="bg-white rounded-3xl p-10 border border-gray-100 shadow-sm max-w-5xl">
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="grid grid-cols-2 gap-8">
 
           <div>
-            <p className="text-gray-500 mb-2">
-              Nombre
-            </p>
 
-            <input
-              value={student.name}
-              onChange={(e) =>
-                setStudent({
-                  ...student,
-                  name: e.target.value,
-                })
-              }
-              className="w-full bg-[#F8FAFC] rounded-2xl px-5 py-4 outline-none"
-            />
-          </div>
-
-          <div>
-            <p className="text-gray-500 mb-2">
+            <p className="text-gray-400 mb-1">
               Universidad
             </p>
 
-            <input
-              value={student.university}
-              onChange={(e) =>
-                setStudent({
-                  ...student,
-                  university: e.target.value,
-                })
-              }
-              className="w-full bg-[#F8FAFC] rounded-2xl px-5 py-4 outline-none"
-            />
+            <p className="text-2xl font-semibold text-[#1E293B]">
+              {student.university}
+            </p>
+
           </div>
 
           <div>
-            <p className="text-gray-500 mb-2">
+
+            <p className="text-gray-400 mb-1">
               Carrera
             </p>
 
-            <input
-              value={student.career || ""}
-              onChange={(e) =>
-                setStudent({
-                  ...student,
-                  career: e.target.value,
-                })
-              }
-              className="w-full bg-[#F8FAFC] rounded-2xl px-5 py-4 outline-none"
-            />
+            <p className="text-2xl font-semibold text-[#1E293B]">
+              {student.career ||
+                "Sin definir"}
+            </p>
+
           </div>
 
           <div>
-            <p className="text-gray-500 mb-2">
+
+            <p className="text-gray-400 mb-1">
               Área
             </p>
 
-            <input
-              value={student.area || ""}
-              onChange={(e) =>
-                setStudent({
-                  ...student,
-                  area: e.target.value,
-                })
-              }
-              className="w-full bg-[#F8FAFC] rounded-2xl px-5 py-4 outline-none"
-            />
+            <p className="text-2xl font-semibold text-[#1E293B]">
+              {student.area ||
+                "General"}
+            </p>
+
           </div>
 
           <div>
-            <p className="text-gray-500 mb-2">
+
+            <p className="text-gray-400 mb-1">
               Tutor
             </p>
 
-            <input
-              value={student.tutor || ""}
-              onChange={(e) =>
-                setStudent({
-                  ...student,
-                  tutor: e.target.value,
-                })
-              }
-              className="w-full bg-[#F8FAFC] rounded-2xl px-5 py-4 outline-none"
-            />
-          </div>
-
-          <div>
-            <p className="text-gray-500 mb-2">
-              Promedio
+            <p className="text-2xl font-semibold text-[#1E293B]">
+              {student.tutor || "-"}
             </p>
 
-            <div className="w-full bg-[#EEF0FF] text-[#5B6CFF] rounded-2xl px-5 py-4 font-bold text-xl">
-              {student.average || "-"}
-            </div>
           </div>
-
-        </div>
-
-        <div className="flex gap-4 mt-10 flex-wrap">
-
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="bg-[#5B6CFF] hover:bg-[#4F46E5] transition text-white px-6 py-4 rounded-2xl font-medium"
-          >
-            {saving
-              ? "Guardando..."
-              : "Guardar cambios"}
-          </button>
-
-          <button
-            onClick={handleNewEvaluation}
-            className="bg-[#EEF0FF] text-[#5B6CFF] px-6 py-4 rounded-2xl font-medium"
-          >
-            + Nueva evaluación
-          </button>
-
-          <button
-            onClick={handleDelete}
-            className="bg-red-50 text-red-600 px-6 py-4 rounded-2xl font-medium"
-          >
-            Eliminar alumno
-          </button>
 
         </div>
 
       </div>
 
-      {/* Evaluaciones */}
-      <div className="mt-10 max-w-5xl">
+      <div className="flex items-center justify-between mb-8">
 
-        <h2 className="text-3xl font-bold text-[#1E293B] mb-6">
+        <h2 className="text-4xl font-bold text-[#1E293B]">
           Evaluaciones
         </h2>
 
-        <div className="space-y-5">
+        <button
+          onClick={() =>
+            setShowModal(true)
+          }
+          className="bg-[#5B6CFF] hover:bg-[#4C5DF5] text-white px-6 py-4 rounded-3xl transition font-semibold"
+        >
+          + Nueva evaluación
+        </button>
 
-          {evaluations.length === 0 ? (
+      </div>
 
-            <div className="bg-white rounded-3xl p-8 border border-gray-100 text-gray-500">
-              Sin evaluaciones registradas
-            </div>
+      <div className="grid gap-6">
 
-          ) : (
+        {evaluations.length === 0 ? (
 
-            evaluations.map((evaluation) => (
+          <div className="bg-white rounded-3xl p-8 border border-gray-100 text-gray-500">
+            Sin evaluaciones registradas
+          </div>
+
+        ) : (
+
+          evaluations.map(
+            (evaluation) => (
 
               <div
                 key={evaluation.id}
@@ -486,7 +343,8 @@ export default function StudentDetail({
                     <p className="text-gray-400 text-sm mt-1">
                       {evaluation.createdAt?.seconds
                         ? new Date(
-                            evaluation.createdAt.seconds * 1000
+                            evaluation.createdAt.seconds *
+                              1000
                           ).toLocaleDateString(
                             "es-CL",
                             {
@@ -500,8 +358,23 @@ export default function StudentDetail({
 
                   </div>
 
-                  <div className="bg-[#EEF0FF] text-[#5B6CFF] px-5 py-3 rounded-2xl text-xl font-bold">
-                    {evaluation.score}
+                  <div className="flex items-center gap-3">
+
+                    <div className="bg-[#EEF0FF] text-[#5B6CFF] px-5 py-3 rounded-2xl text-xl font-bold">
+                      {evaluation.score}
+                    </div>
+
+                    <button
+                      onClick={() =>
+                        handleDeleteEvaluation(
+                          evaluation.id
+                        )
+                      }
+                      className="bg-red-50 text-red-500 px-4 py-3 rounded-2xl hover:bg-red-100 transition"
+                    >
+                      Eliminar
+                    </button>
+
                   </div>
 
                 </div>
@@ -513,14 +386,89 @@ export default function StudentDetail({
 
               </div>
 
-            ))
+            )
+          )
 
-          )}
-
-        </div>
+        )}
 
       </div>
 
+      {showModal && (
+
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+
+          <div className="bg-white rounded-3xl p-8 w-full max-w-xl">
+
+            <h2 className="text-3xl font-bold mb-6 text-[#1E293B]">
+              Nueva evaluación
+            </h2>
+
+            <div className="grid gap-4">
+
+              <input
+                placeholder="Título"
+                value={title}
+                onChange={(e) =>
+                  setTitle(
+                    e.target.value
+                  )
+                }
+                className="border border-gray-200 rounded-2xl px-5 py-4"
+              />
+
+              <input
+                placeholder="Nota"
+                value={score}
+                onChange={(e) =>
+                  setScore(
+                    e.target.value
+                  )
+                }
+                className="border border-gray-200 rounded-2xl px-5 py-4"
+              />
+
+              <textarea
+                placeholder="Descripción"
+                value={description}
+                onChange={(e) =>
+                  setDescription(
+                    e.target.value
+                  )
+                }
+                className="border border-gray-200 rounded-2xl px-5 py-4 min-h-[140px]"
+              />
+
+            </div>
+
+            <div className="flex items-center justify-end gap-4 mt-8">
+
+              <button
+                onClick={() =>
+                  setShowModal(false)
+                }
+                className="px-5 py-3 rounded-2xl bg-gray-100"
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={
+                  handleAddEvaluation
+                }
+                className="bg-[#5B6CFF] hover:bg-[#4C5DF5] text-white px-6 py-3 rounded-2xl transition"
+              >
+                Guardar
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      )}
+
     </div>
+
   );
 }
