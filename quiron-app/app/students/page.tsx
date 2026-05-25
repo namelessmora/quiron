@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+
 import {
   collection,
   getDocs,
@@ -9,21 +10,30 @@ import {
 
 import { db } from "../lib/firebase";
 
+import StudentModal from "../components/StudentModal";
+
 export default function StudentsPage() {
 
-  const [students, setStudents] = useState<any[]>([]);
+  const [students, setStudents] =
+    useState<any[]>([]);
+
+  const [showModal, setShowModal] =
+    useState(false);
 
   async function loadStudents() {
+
     const querySnapshot = await getDocs(
       collection(db, "students")
     );
 
-    const studentsData = querySnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+    const studentsData =
+      querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
 
     setStudents(studentsData);
+
   }
 
   useEffect(() => {
@@ -46,12 +56,13 @@ export default function StudentsPage() {
           </p>
         </div>
 
-        <Link
-          href="/students/new"
+        <button
+          onClick={() => setShowModal(true)}
           className="bg-[#5B6CFF] hover:bg-[#4F46E5] transition text-white px-6 py-4 rounded-2xl font-medium shadow-sm"
         >
           + Nuevo alumno
-        </Link>
+        </button>
+
       </div>
 
       {/* Filtros */}
@@ -73,6 +84,7 @@ export default function StudentsPage() {
         <select className="bg-white border border-gray-100 rounded-2xl px-5 py-4 outline-none shadow-sm">
           <option>TODAS</option>
         </select>
+
       </div>
 
       {/* Tabla */}
@@ -94,6 +106,7 @@ export default function StudentsPage() {
             href={`/students/${student.id}`}
             className="grid grid-cols-6 px-8 py-6 border-b border-gray-50 hover:bg-[#FAFBFF] transition items-center"
           >
+
             <div className="font-semibold text-[#1E293B]">
               {student.name}
             </div>
@@ -121,11 +134,25 @@ export default function StudentsPage() {
                 Activo
               </span>
             </div>
+
           </Link>
 
         ))}
 
       </div>
+
+      {showModal && (
+
+        <StudentModal
+          onClose={() => setShowModal(false)}
+          onSaved={() => {
+            loadStudents();
+            setShowModal(false);
+          }}
+        />
+
+      )}
+
     </div>
   );
 }

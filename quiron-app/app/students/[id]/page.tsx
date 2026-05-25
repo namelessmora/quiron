@@ -141,6 +141,21 @@ export default function StudentDetail({
     }
   }
 
+  function handleNewEvaluation() {
+
+    const title =
+      prompt("Nombre evaluación");
+
+    const score =
+      prompt("Nota");
+
+    if (!title || !score) return;
+
+    alert(
+      `Evaluación creada:\n${title} - ${score}`
+    );
+  }
+
   if (loading) {
     return (
       <div className="p-10">
@@ -263,7 +278,7 @@ export default function StudentDetail({
 
         </div>
 
-        <div className="flex gap-4 mt-10">
+        <div className="flex gap-4 mt-10 flex-wrap">
 
           <button
             onClick={handleSave}
@@ -276,6 +291,7 @@ export default function StudentDetail({
           </button>
 
           <button
+            onClick={handleNewEvaluation}
             className="bg-[#EEF0FF] text-[#5B6CFF] px-6 py-4 rounded-2xl font-medium"
           >
             + Nueva evaluación
