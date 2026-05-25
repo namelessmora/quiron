@@ -7,9 +7,13 @@ import {
   getDoc,
   updateDoc,
   deleteDoc,
+  addDoc,
+  collection,
+  getDocs,
+  serverTimestamp,
 } from "firebase/firestore";
 
-import { db } from "../../lib/firebase";
+import { db, auth } from "../../lib/firebase";
 
 import { useRouter } from "next/navigation";
 
@@ -22,6 +26,15 @@ type Student = {
   tutor?: string;
 };
 
+type Evaluation = {
+  id: string;
+  title: string;
+  score: string;
+  description?: string;
+  createdBy?: string;
+  createdAt?: any;
+};
+
 export default function StudentDetail({
   params,
 }: {
@@ -32,6 +45,9 @@ export default function StudentDetail({
 
   const [student, setStudent] =
     useState<Student | null>(null);
+
+  const [evaluations, setEvaluations] =
+    useState<Evaluation[]>([]);
 
   const [loading, setLoading] =
     useState(true);
@@ -59,10 +75,32 @@ export default function StudentDetail({
 
         if (docSnap.exists()) {
 
-          setStudent({
+          const studentData = {
             id: docSnap.id,
             ...(docSnap.data() as Omit<Student, "id">),
-          });
+          };
+
+          setStudent(studentData);
+
+          const evaluationsSnapshot =
+            await getDocs(
+              collection(
+                db,
+                "students",
+                resolvedParams.id,
+                "evaluations"
+              )
+            );
+
+          const evaluationsData =
+            evaluationsSnapshot.docs.map(
+              (doc) => ({
+                id: doc.id,
+                ...doc.data(),
+              })
+            ) as Evaluation[];
+
+          setEvaluations(evaluationsData);
         }
 
       } catch (error) {
@@ -141,19 +179,75 @@ export default function StudentDetail({
     }
   }
 
-  function handleNewEvaluation() {
+  async function handleNewEvaluation() {
+
+    if (!student) return;
 
     const title =
       prompt("Nombre evaluación");
 
+    if (!title) return;
+
     const score =
       prompt("Nota");
 
-    if (!title || !score) return;
+    if (!score) return;
 
-    alert(
-      `Evaluación creada:\n${title} - ${score}`
-    );
+    const description =
+      prompt("Comentario evaluación");
+
+    try {
+
+      await addDoc(
+
+        collection(
+          db,
+          "students",
+          student.id,
+          "evaluations"
+        ),
+
+        {
+          title,
+          score,
+          description: description || "",
+          createdBy:
+            auth.currentUser?.email ||
+            "Desconocido",
+          createdAt:
+            serverTimestamp(),
+        }
+
+      );
+
+      const evaluationsSnapshot =
+        await getDocs(
+          collection(
+            db,
+            "students",
+            student.id,
+            "evaluations"
+          )
+        );
+
+      const evaluationsData =
+        evaluationsSnapshot.docs.map(
+          (doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          })
+        ) as Evaluation[];
+
+      setEvaluations(evaluationsData);
+
+    } catch (error) {
+
+      console.error(error);
+
+      alert(
+        "Error al crear evaluación"
+      );
+    }
   }
 
   if (loading) {
@@ -303,6 +397,63 @@ export default function StudentDetail({
           >
             Eliminar alumno
           </button>
+
+        </div>
+
+      </div>
+
+      {/* Evaluaciones */}
+      <div className="mt-10 max-w-5xl">
+
+        <h2 className="text-3xl font-bold text-[#1E293B] mb-6">
+          Evaluaciones
+        </h2>
+
+        <div className="space-y-5">
+
+          {evaluations.length === 0 ? (
+
+            <div className="bg-white rounded-3xl p-8 border border-gray-100 text-gray-500">
+              Sin evaluaciones registradas
+            </div>
+
+          ) : (
+
+            evaluations.map((evaluation) => (
+
+              <div
+                key={evaluation.id}
+                className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm"
+              >
+
+                <div className="flex items-start justify-between mb-4">
+
+                  <div>
+                    <h3 className="text-2xl font-bold text-[#1E293B]">
+                      {evaluation.title}
+                    </h3>
+
+                    <p className="text-gray-500 mt-1">
+                      {evaluation.createdBy}
+                    </p>
+                  </div>
+
+                  <div className="bg-[#EEF0FF] text-[#5B6CFF] px-5 py-3 rounded-2xl text-xl font-bold">
+                    {evaluation.score}
+                  </div>
+
+                </div>
+
+                <p className="text-gray-700 leading-relaxed">
+                  {evaluation.description ||
+                    "Sin comentarios"}
+                </p>
+
+              </div>
+
+            ))
+
+          )}
 
         </div>
 
