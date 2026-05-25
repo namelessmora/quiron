@@ -24,6 +24,7 @@ type Student = {
   career?: string;
   area?: string;
   tutor?: string;
+  average?: string;
 };
 
 type Evaluation = {
@@ -220,6 +221,34 @@ export default function StudentDetail({
 
       );
 
+      const currentEvaluations =
+        [...evaluations];
+
+      currentEvaluations.push({
+        id: crypto.randomUUID(),
+        title,
+        score,
+      });
+
+      const numericScores =
+        currentEvaluations.map((e) =>
+          Number(e.score)
+        );
+
+      const average =
+        numericScores.reduce(
+          (a, b) => a + b,
+          0
+        ) / numericScores.length;
+
+      await updateDoc(
+        doc(db, "students", student.id),
+        {
+          average:
+            average.toFixed(1),
+        }
+      );
+
       const evaluationsSnapshot =
         await getDocs(
           collection(
@@ -239,6 +268,12 @@ export default function StudentDetail({
         ) as Evaluation[];
 
       setEvaluations(evaluationsData);
+
+      setStudent({
+        ...student,
+        average:
+          average.toFixed(1),
+      });
 
     } catch (error) {
 
@@ -370,6 +405,16 @@ export default function StudentDetail({
             />
           </div>
 
+          <div>
+            <p className="text-gray-500 mb-2">
+              Promedio
+            </p>
+
+            <div className="w-full bg-[#EEF0FF] text-[#5B6CFF] rounded-2xl px-5 py-4 font-bold text-xl">
+              {student.average || "-"}
+            </div>
+          </div>
+
         </div>
 
         <div className="flex gap-4 mt-10 flex-wrap">
@@ -429,13 +474,30 @@ export default function StudentDetail({
                 <div className="flex items-start justify-between mb-4">
 
                   <div>
+
                     <h3 className="text-2xl font-bold text-[#1E293B]">
                       {evaluation.title}
                     </h3>
 
-                    <p className="text-gray-500 mt-1">
+                    <p className="text-gray-500 mt-1 text-sm">
                       {evaluation.createdBy}
                     </p>
+
+                    <p className="text-gray-400 text-sm mt-1">
+                      {evaluation.createdAt?.seconds
+                        ? new Date(
+                            evaluation.createdAt.seconds * 1000
+                          ).toLocaleDateString(
+                            "es-CL",
+                            {
+                              day: "numeric",
+                              month: "long",
+                              year: "numeric",
+                            }
+                          )
+                        : "Fecha pendiente"}
+                    </p>
+
                   </div>
 
                   <div className="bg-[#EEF0FF] text-[#5B6CFF] px-5 py-3 rounded-2xl text-xl font-bold">
