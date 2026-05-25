@@ -16,6 +16,10 @@ import {
 } from "firebase/firestore";
 
 import { db, auth } from "../../lib/firebase";
+import {
+  Rubric,
+  rubrics,
+} from "../../data/rubrics";
 
 type Student = {
   id: string;
@@ -34,8 +38,19 @@ type Evaluation = {
   score: string;
   description?: string;
   rubricLink?: string;
+  rubricId?: string;
+  rubricName?: string;
+  rubricResponses?: RubricResponse[];
   createdBy?: string;
   createdAt?: Timestamp | { seconds?: number };
+};
+
+type RubricResponse = {
+  criterionId: string;
+  criterion: string;
+  dimension: string;
+  label: string;
+  score: number;
 };
 
 function formatEvaluationDate(
@@ -70,6 +85,99 @@ function fileSafeName(value: string) {
     .replace(/[^a-zA-Z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .toLowerCase();
+}
+
+function normalizeMatchValue(value?: string) {
+
+  return (value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function matchesValue(
+  source: string | undefined,
+  candidates: string[]
+) {
+
+  const normalizedSource =
+    normalizeMatchValue(source);
+
+  if (!normalizedSource) return false;
+
+  return candidates.some((candidate) => {
+    const normalizedCandidate =
+      normalizeMatchValue(candidate);
+
+    if (!normalizedCandidate) return false;
+
+    return (
+      normalizedSource === normalizedCandidate ||
+      normalizedSource.includes(normalizedCandidate) ||
+      normalizedCandidate.includes(normalizedSource)
+    );
+  });
+}
+
+function findSuggestedRubric(
+  student: Student
+) {
+
+  return rubrics.find((rubric) => {
+    const universityMatches =
+      matchesValue(student.university, [
+        rubric.university,
+      ]);
+
+    const areaMatches =
+      matchesValue(student.area, [
+        rubric.area,
+        ...rubric.areaAliases,
+      ]);
+
+    return universityMatches && areaMatches;
+  });
+}
+
+function calculateRubricGrade(
+  rubric: Rubric,
+  responses: Record<string, RubricResponse>
+) {
+
+  const answeredCriteria =
+    rubric.criteria.filter(
+      (criterion) => responses[criterion.id]
+    );
+
+  if (answeredCriteria.length === 0) {
+    return "";
+  }
+
+  const totalScore =
+    answeredCriteria.reduce(
+      (total, criterion) =>
+        total +
+        responses[criterion.id].score,
+      0
+    );
+
+  const maxScore =
+    answeredCriteria.length *
+    rubric.maxScore;
+
+  const percentage =
+    (totalScore / maxScore) * 100;
+
+  const grade =
+    percentage < rubric.scale
+      ? 1 + (percentage / rubric.scale) * 3
+      : 4 +
+        ((percentage - rubric.scale) /
+          (100 - rubric.scale)) *
+          3;
+
+  return Math.min(7, Math.max(1, grade)).toFixed(1);
 }
 
 export default function StudentDetail({
@@ -109,6 +217,18 @@ export default function StudentDetail({
 
   const [rubricLink, setRubricLink] =
   useState("");
+
+  const [
+    selectedRubricId,
+    setSelectedRubricId,
+  ] = useState("");
+
+  const [
+    rubricResponses,
+    setRubricResponses,
+  ] = useState<
+    Record<string, RubricResponse>
+  >({});
 
   const [editScore, setEditScore] =
     useState("");
@@ -219,25 +339,127 @@ export default function StudentDetail({
     });
   }, [loadStudent]);
 
+  const selectedRubric =
+    rubrics.find(
+      (rubric) =>
+        rubric.id === selectedRubricId
+    );
+
+  const rubricGrade =
+    selectedRubric
+      ? calculateRubricGrade(
+          selectedRubric,
+          rubricResponses
+        )
+      : "";
+
+  function openNewEvaluationModal() {
+
+    if (student) {
+      const suggestedRubric =
+        findSuggestedRubric(student);
+
+      setSelectedRubricId(
+        suggestedRubric?.id || ""
+      );
+      setTitle(
+        suggestedRubric?.name || ""
+      );
+      setScore("");
+      setRubricResponses({});
+    }
+
+    setShowModal(true);
+  }
+
+  function handleRubricChange(
+    rubricId: string
+  ) {
+
+    const rubric = rubrics.find(
+      (currentRubric) =>
+        currentRubric.id === rubricId
+    );
+
+    setSelectedRubricId(rubricId);
+    setRubricResponses({});
+    setScore("");
+
+    if (rubric) {
+      setTitle(rubric.name);
+    }
+  }
+
+  function selectRubricOption(
+    rubric: Rubric,
+    criterionId: string,
+    label: string,
+    optionScore: number
+  ) {
+
+    const criterion =
+      rubric.criteria.find(
+        (currentCriterion) =>
+          currentCriterion.id === criterionId
+      );
+
+    if (!criterion) return;
+
+    setRubricResponses((current) => ({
+      ...current,
+      [criterion.id]: {
+        criterionId: criterion.id,
+        criterion: criterion.title,
+        dimension: criterion.dimension,
+        label,
+        score: optionScore,
+      },
+    }));
+  }
+
   async function handleAddEvaluation() {
 
     if (!student) return;
 
-    try {
+	    try {
 
-      await addDoc(
+      const evaluationScore =
+        rubricGrade || score;
+
+      const evaluationTitle =
+        title ||
+        selectedRubric?.name ||
+        "Evaluación clínica";
+
+      if (!evaluationScore) {
+        alert(
+          "Ingresa una nota o responde al menos un criterio de la pauta."
+        );
+
+        return;
+      }
+	
+	      await addDoc(
         collection(
           db,
           "students",
           student.id,
           "evaluations"
         ),
-        {
-          title,
-          score,
-          description,
-          rubricLink,
-
+	        {
+	          title: evaluationTitle,
+	          score: evaluationScore,
+	          description,
+	          rubricLink,
+          rubricId:
+            selectedRubric?.id || "",
+          rubricName:
+            selectedRubric?.name || "",
+          rubricResponses:
+            Object.values(
+              rubricResponses
+            ),
+	
           createdBy:
             auth.currentUser?.email ||
             "Usuario",
@@ -250,22 +472,30 @@ export default function StudentDetail({
       const currentEvaluations =
         [...evaluations];
 
-      currentEvaluations.push({
-        id: crypto.randomUUID(),
-        title,
-        score,
-      });
+	      currentEvaluations.push({
+	        id: crypto.randomUUID(),
+	        title: evaluationTitle,
+	        score: evaluationScore,
+	      });
 
-      const numericScores =
-        currentEvaluations.map((e) =>
-          Number(e.score)
-        );
+	      const numericScores =
+	        currentEvaluations
+            .map((e) =>
+              Number(e.score)
+            )
+            .filter((evaluationScore) =>
+              Number.isFinite(
+                evaluationScore
+              )
+            );
 
-      const average =
-        numericScores.reduce(
-          (a, b) => a + b,
-          0
-        ) / numericScores.length;
+	      const average =
+	        numericScores.length > 0
+            ? numericScores.reduce(
+                (a, b) => a + b,
+                0
+              ) / numericScores.length
+            : 0;
 
       await updateDoc(
         doc(db, "students", student.id),
@@ -283,10 +513,12 @@ export default function StudentDetail({
 
       setShowModal(false);
 
-      setTitle("");
-      setScore("");
-      setDescription("");
-      setRubricLink("");
+	      setTitle("");
+	      setScore("");
+	      setDescription("");
+	      setRubricLink("");
+      setSelectedRubricId("");
+      setRubricResponses({});
 
       loadEvaluations(student.id);
 
@@ -713,6 +945,16 @@ export default function StudentDetail({
           }
         );
 
+        if (evaluation.rubricName) {
+          addText(
+            `Pauta: ${evaluation.rubricName}`,
+            {
+              size: 10,
+              gap: 4,
+            }
+          );
+        }
+
         addText(
           `Comentarios: ${
             evaluation.description ||
@@ -731,6 +973,29 @@ export default function StudentDetail({
               size: 10,
               color: [79, 70, 229],
               gap: 4,
+            }
+          );
+        }
+
+        if (
+          evaluation.rubricResponses &&
+          evaluation.rubricResponses.length > 0
+        ) {
+          addText("Respuestas de pauta:", {
+            size: 10,
+            style: "bold",
+            gap: 4,
+          });
+
+          evaluation.rubricResponses.forEach(
+            (response) => {
+              addText(
+                `${response.dimension} - ${response.criterion}: ${response.label} (${response.score})`,
+                {
+                  size: 9,
+                  gap: 3,
+                }
+              );
             }
           );
         }
@@ -926,10 +1191,10 @@ export default function StudentDetail({
           Evaluaciones
         </h2>
 
-        <button
-          onClick={() =>
-            setShowModal(true)
-          }
+	        <button
+	          onClick={() =>
+	            openNewEvaluationModal()
+	          }
           className="bg-[#5B6CFF] hover:bg-[#4C5DF5] text-white px-6 py-4 rounded-3xl transition font-semibold"
         >
           + Nueva evaluación
@@ -967,8 +1232,8 @@ export default function StudentDetail({
                       {evaluation.createdBy}
                     </p>
 
-                    <p className="text-gray-400 text-sm mt-1">
-                      {evaluation.createdAt?.seconds
+	                    <p className="text-gray-400 text-sm mt-1">
+	                      {evaluation.createdAt?.seconds
                         ? new Date(
                             evaluation.createdAt.seconds *
                               1000
@@ -980,10 +1245,16 @@ export default function StudentDetail({
                               year: "numeric",
                             }
                           )
-                        : "Fecha pendiente"}
-                    </p>
+	                        : "Fecha pendiente"}
+	                    </p>
 
-                  </div>
+                    {evaluation.rubricName && (
+                      <p className="text-[#5B6CFF] text-sm mt-2 font-semibold">
+                        {evaluation.rubricName}
+                      </p>
+                    )}
+
+	                  </div>
 
                   <div className="flex items-center gap-3">
 
@@ -1045,16 +1316,39 @@ export default function StudentDetail({
 
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
 
-          <div className="bg-white rounded-3xl p-8 w-full max-w-xl">
+          <div className="bg-white rounded-3xl p-8 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
 
             <h2 className="text-3xl font-bold mb-6 text-[#1E293B]">
               Nueva evaluación
             </h2>
 
-            <div className="grid gap-4">
+	            <div className="grid gap-4">
 
-              <input
-                placeholder="Título"
+              <select
+                value={selectedRubricId}
+                onChange={(e) =>
+                  handleRubricChange(
+                    e.target.value
+                  )
+                }
+                className="border border-gray-200 rounded-2xl px-5 py-4"
+              >
+                <option value="">
+                  Evaluación manual
+                </option>
+
+                {rubrics.map((rubric) => (
+                  <option
+                    key={rubric.id}
+                    value={rubric.id}
+                  >
+                    {rubric.name}
+                  </option>
+                ))}
+              </select>
+	
+	              <input
+	                placeholder="Título"
                 value={title}
                 onChange={(e) =>
                   setTitle(
@@ -1064,20 +1358,51 @@ export default function StudentDetail({
                 className="border border-gray-200 rounded-2xl px-5 py-4"
               />
 
-              <input
-                placeholder="Nota"
-                type="number"
+	              <input
+	                placeholder="Nota"
+	                type="number"
                 min="1"
                 max="7"
                 step="0.1"
-                value={score}
-                onChange={(e) =>
-                  setScore(
-                    e.target.value
-                  )
-                }
-                className="border border-gray-200 rounded-2xl px-5 py-4"
-              />
+	                value={
+                    selectedRubric
+                      ? rubricGrade
+                      : score
+                  }
+	                onChange={(e) =>
+	                  setScore(
+	                    e.target.value
+	                  )
+	                }
+                  disabled={Boolean(
+                    selectedRubric
+                  )}
+	                className="border border-gray-200 rounded-2xl px-5 py-4"
+	              />
+
+              {selectedRubric && (
+                <div className="rounded-2xl border border-indigo-100 bg-indigo-50 px-5 py-4">
+                  <p className="font-semibold text-[#5B6CFF]">
+                    Nota calculada:{" "}
+                    {rubricGrade || "-"}
+                  </p>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    Respuestas:{" "}
+                    {
+                      Object.keys(
+                        rubricResponses
+                      ).length
+                    }{" "}
+                    de{" "}
+                    {
+                      selectedRubric.criteria
+                        .length
+                    }{" "}
+                    criterios
+                  </p>
+                </div>
+              )}
 
               <textarea
                 placeholder="Descripción"
@@ -1090,7 +1415,7 @@ export default function StudentDetail({
                 className="border border-gray-200 rounded-2xl px-5 py-4 min-h-[140px]"
               />
 
-              <input
+	              <input
                 placeholder="Link rúbrica"
                 value={rubricLink}
                 onChange={(e) =>
@@ -1099,9 +1424,87 @@ export default function StudentDetail({
                   )
                 }
                 className="border border-gray-200 rounded-2xl px-5 py-4"
-              />
+	              />
 
-            </div>
+              {selectedRubric && (
+                <div className="space-y-5">
+                  {Array.from(
+                    new Set(
+                      selectedRubric.criteria.map(
+                        (criterion) =>
+                          criterion.dimension
+                      )
+                    )
+                  ).map((dimension) => (
+                    <section
+                      key={dimension}
+                      className="rounded-2xl border border-gray-100 p-5"
+                    >
+                      <h3 className="text-xl font-bold text-[#1E293B]">
+                        {dimension}
+                      </h3>
+
+                      <div className="mt-4 space-y-4">
+                        {selectedRubric.criteria
+                          .filter(
+                            (criterion) =>
+                              criterion.dimension ===
+                              dimension
+                          )
+                          .map((criterion) => (
+                            <div
+                              key={criterion.id}
+                              className="rounded-2xl bg-[#F8FAFC] p-4"
+                            >
+                              <p className="font-medium text-[#1E293B]">
+                                {criterion.title}
+                              </p>
+
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {criterion.options.map(
+                                  (option) => {
+                                    const selected =
+                                      rubricResponses[
+                                        criterion.id
+                                      ]?.label ===
+                                      option.label;
+
+                                    return (
+                                      <button
+                                        key={
+                                          option.label
+                                        }
+                                        type="button"
+                                        onClick={() =>
+                                          selectRubricOption(
+                                            selectedRubric,
+                                            criterion.id,
+                                            option.label,
+                                            option.score
+                                          )
+                                        }
+                                        className={`rounded-2xl border px-4 py-2 text-sm font-semibold transition ${
+                                          selected
+                                            ? "border-[#5B6CFF] bg-[#5B6CFF] text-white"
+                                            : "border-gray-200 bg-white text-gray-600 hover:border-[#5B6CFF]"
+                                        }`}
+                                      >
+                                        {option.label} (
+                                        {option.score})
+                                      </button>
+                                    );
+                                  }
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              )}
+
+	            </div>
 
             <div className="flex items-center justify-end gap-4 mt-8">
 
