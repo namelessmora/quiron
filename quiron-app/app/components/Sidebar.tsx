@@ -45,6 +45,10 @@ export default function Sidebar() {
 
   ];
 
+  if (pathname === "/login") {
+    return null;
+  }
+
   return (
     <aside className="w-[260px] min-h-screen bg-white border-r border-gray-100 px-6 py-8 flex flex-col justify-between">
 

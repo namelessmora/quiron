@@ -1,3 +1,27 @@
+type Student = {
+  areas?: string[];
+};
+
+type RubricOption = {
+  label: string;
+  score: number;
+};
+
+type RubricCriterion = {
+  id: string | number;
+  title: string;
+  options: RubricOption[];
+};
+
+type Rubric = {
+  criteria: RubricCriterion[];
+};
+
+type Response = {
+  criterion: string;
+  score: number;
+};
+
 type Props = {
   showModal: boolean;
 
@@ -5,7 +29,7 @@ type Props = {
     value: boolean
   ) => void;
 
-  student: any;
+  student: Student;
 
   area: string;
   setArea: (value: string) => void;
@@ -25,9 +49,9 @@ type Props = {
     value: string
   ) => void;
 
-  selectedRubric: any;
+  selectedRubric?: Rubric | null;
 
-  responses: any[];
+  responses: Response[];
 
   selectOption: (
     criterion: string,
@@ -149,7 +173,7 @@ export default function EvaluationModal({
           <div className="space-y-4 mb-6">
 
             {selectedRubric.criteria.map(
-              (criterion: any) => (
+              (criterion) => (
 
                 <div
                   key={criterion.id}
@@ -163,7 +187,7 @@ export default function EvaluationModal({
                   <div className="flex gap-3 flex-wrap">
 
                     {criterion.options.map(
-                      (option: any) => (
+                      (option) => (
 
                         <button
                           key={option.label}

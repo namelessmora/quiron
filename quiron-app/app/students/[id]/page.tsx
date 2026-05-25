@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   doc,
@@ -11,6 +11,7 @@ import {
   serverTimestamp,
   deleteDoc,
   updateDoc,
+  Timestamp,
 } from "firebase/firestore";
 
 import { db, auth } from "../../lib/firebase";
@@ -33,7 +34,7 @@ type Evaluation = {
   description?: string;
   rubricLink?: string;
   createdBy?: string;
-  createdAt?: any;
+  createdAt?: Timestamp | { seconds?: number };
 };
 
 export default function StudentDetail({
@@ -57,6 +58,11 @@ export default function StudentDetail({
   const [showEditModal, setShowEditModal] =
     useState(false);
 
+  const [
+    editingEvaluation,
+    setEditingEvaluation,
+  ] = useState<Evaluation | null>(null);
+
   const [title, setTitle] =
     useState("");
 
@@ -68,6 +74,19 @@ export default function StudentDetail({
 
   const [rubricLink, setRubricLink] =
   useState("");
+
+  const [editScore, setEditScore] =
+    useState("");
+
+  const [
+    editDescription,
+    setEditDescription,
+  ] = useState("");
+
+  const [
+    editRubricLink,
+    setEditRubricLink,
+  ] = useState("");
 
   const [editName, setEditName] =
     useState("");
@@ -89,11 +108,33 @@ export default function StudentDetail({
   setEditObservations,
 ] = useState("");
 
-  useEffect(() => {
-    loadStudent();
+  const loadEvaluations = useCallback(async (
+    studentId: string
+  ) => {
+
+    const snapshot = await getDocs(
+      collection(
+        db,
+        "students",
+        studentId,
+        "evaluations"
+      )
+    );
+
+    const data = snapshot.docs.map(
+      (doc) => ({
+        id: doc.id,
+        ...(doc.data() as Omit<
+          Evaluation,
+          "id"
+        >),
+      })
+    );
+
+    setEvaluations(data);
   }, []);
 
-  async function loadStudent() {
+  const loadStudent = useCallback(async () => {
 
     try {
 
@@ -135,33 +176,13 @@ export default function StudentDetail({
       setLoading(false);
 
     }
-  }
+  }, [loadEvaluations, params]);
 
-  async function loadEvaluations(
-    studentId: string
-  ) {
-
-    const snapshot = await getDocs(
-      collection(
-        db,
-        "students",
-        studentId,
-        "evaluations"
-      )
-    );
-
-    const data = snapshot.docs.map(
-      (doc) => ({
-        id: doc.id,
-        ...(doc.data() as Omit<
-          Evaluation,
-          "id"
-        >),
-      })
-    );
-
-    setEvaluations(data);
-  }
+  useEffect(() => {
+    queueMicrotask(() => {
+      void loadStudent();
+    });
+  }, [loadStudent]);
 
   async function handleAddEvaluation() {
 
@@ -315,6 +336,116 @@ export default function StudentDetail({
         });
 
       }
+
+    } catch (error) {
+
+      console.error(error);
+
+    }
+  }
+
+  async function updateStudentAverage(
+    nextEvaluations: Evaluation[]
+  ) {
+
+    if (!student) return;
+
+    const numericScores =
+      nextEvaluations
+        .map((evaluation) =>
+          Number(evaluation.score)
+        )
+        .filter((evaluationScore) =>
+          Number.isFinite(evaluationScore)
+        );
+
+    const nextAverage =
+      numericScores.length > 0
+        ? (
+            numericScores.reduce(
+              (total, evaluationScore) =>
+                total + evaluationScore,
+              0
+            ) / numericScores.length
+          ).toFixed(1)
+        : "";
+
+    await updateDoc(
+      doc(db, "students", student.id),
+      {
+        average: nextAverage,
+      }
+    );
+
+    setStudent({
+      ...student,
+      average: nextAverage,
+    });
+  }
+
+  function openEvaluationEditor(
+    evaluation: Evaluation
+  ) {
+
+    setEditingEvaluation(evaluation);
+    setEditScore(evaluation.score || "");
+    setEditDescription(
+      evaluation.description || ""
+    );
+    setEditRubricLink(
+      evaluation.rubricLink || ""
+    );
+  }
+
+  function closeEvaluationEditor() {
+
+    setEditingEvaluation(null);
+    setEditScore("");
+    setEditDescription("");
+    setEditRubricLink("");
+  }
+
+  async function handleUpdateEvaluation() {
+
+    if (!student || !editingEvaluation) return;
+
+    try {
+
+      const nextEvaluation = {
+        ...editingEvaluation,
+        score: editScore,
+        description: editDescription,
+        rubricLink: editRubricLink,
+      };
+
+      await updateDoc(
+        doc(
+          db,
+          "students",
+          student.id,
+          "evaluations",
+          editingEvaluation.id
+        ),
+        {
+          score: editScore,
+          description: editDescription,
+          rubricLink: editRubricLink,
+        }
+      );
+
+      const nextEvaluations =
+        evaluations.map((evaluation) =>
+          evaluation.id ===
+          editingEvaluation.id
+            ? nextEvaluation
+            : evaluation
+        );
+
+      setEvaluations(nextEvaluations);
+      await updateStudentAverage(
+        nextEvaluations
+      );
+      closeEvaluationEditor();
 
     } catch (error) {
 
@@ -586,14 +717,25 @@ export default function StudentDetail({
 
                   <div className="flex items-center gap-3">
 
-                    <div className="bg-[#EEF0FF] text-[#5B6CFF] px-5 py-3 rounded-2xl text-xl font-bold">
-                      {evaluation.score}
-                    </div>
+	                    <div className="bg-[#EEF0FF] text-[#5B6CFF] px-5 py-3 rounded-2xl text-xl font-bold">
+	                      {evaluation.score}
+	                    </div>
 
                     <button
                       onClick={() =>
-                        handleDeleteEvaluation(
-                          evaluation.id
+                        openEvaluationEditor(
+                          evaluation
+                        )
+                      }
+                      className="bg-white border border-gray-200 text-[#1E293B] px-4 py-3 rounded-2xl hover:border-[#5B6CFF] transition"
+                    >
+                      Editar
+                    </button>
+
+	                    <button
+	                      onClick={() =>
+	                        handleDeleteEvaluation(
+	                          evaluation.id
                         )
                       }
                       className="bg-red-50 text-red-500 px-4 py-3 rounded-2xl hover:bg-red-100 transition"
@@ -654,6 +796,10 @@ export default function StudentDetail({
 
               <input
                 placeholder="Nota"
+                type="number"
+                min="1"
+                max="7"
+                step="0.1"
                 value={score}
                 onChange={(e) =>
                   setScore(
@@ -672,6 +818,17 @@ export default function StudentDetail({
                   )
                 }
                 className="border border-gray-200 rounded-2xl px-5 py-4 min-h-[140px]"
+              />
+
+              <input
+                placeholder="Link rúbrica"
+                value={rubricLink}
+                onChange={(e) =>
+                  setRubricLink(
+                    e.target.value
+                  )
+                }
+                className="border border-gray-200 rounded-2xl px-5 py-4"
               />
 
             </div>
@@ -694,6 +851,85 @@ export default function StudentDetail({
                 className="bg-[#5B6CFF] hover:bg-[#4C5DF5] text-white px-6 py-3 rounded-2xl transition"
               >
                 Guardar
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+
+	      )}
+
+      {editingEvaluation && (
+
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+
+          <div className="bg-white rounded-3xl p-8 w-full max-w-xl">
+
+            <h2 className="text-3xl font-bold mb-6 text-[#1E293B]">
+              Editar evaluación
+            </h2>
+
+            <div className="grid gap-4">
+
+              <input
+                placeholder="Nota"
+                type="number"
+                min="1"
+                max="7"
+                step="0.1"
+                value={editScore}
+                onChange={(e) =>
+                  setEditScore(
+                    e.target.value
+                  )
+                }
+                className="border border-gray-200 rounded-2xl px-5 py-4"
+              />
+
+              <textarea
+                placeholder="Descripción"
+                value={editDescription}
+                onChange={(e) =>
+                  setEditDescription(
+                    e.target.value
+                  )
+                }
+                className="border border-gray-200 rounded-2xl px-5 py-4 min-h-[140px]"
+              />
+
+              <input
+                placeholder="Link rúbrica"
+                value={editRubricLink}
+                onChange={(e) =>
+                  setEditRubricLink(
+                    e.target.value
+                  )
+                }
+                className="border border-gray-200 rounded-2xl px-5 py-4"
+              />
+
+            </div>
+
+            <div className="flex items-center justify-end gap-4 mt-8">
+
+              <button
+                onClick={
+                  closeEvaluationEditor
+                }
+                className="px-5 py-3 rounded-2xl bg-gray-100"
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={
+                  handleUpdateEvaluation
+                }
+                className="bg-[#5B6CFF] hover:bg-[#4C5DF5] text-white px-6 py-3 rounded-2xl transition"
+              >
+                Guardar cambios
               </button>
 
             </div>
@@ -770,26 +1006,16 @@ export default function StudentDetail({
                 }
                 className="border border-gray-200 rounded-2xl px-5 py-4"
               />
-<textarea
-  placeholder="Observaciones generales"
-  value={editObservations}
-  onChange={(e) =>
-    setEditObservations(
-      e.target.value
-    )
-  }
-  className="border border-gray-200 rounded-2xl px-5 py-4 min-h-[140px]"
-/>
-              <input
-                  placeholder="Link rúbrica"
-                  value={rubricLink}
-                 onChange={(e) =>
-                   setRubricLink(
+              <textarea
+                placeholder="Observaciones generales"
+                value={editObservations}
+                onChange={(e) =>
+                  setEditObservations(
                     e.target.value
-                   )
-                 }
-                  className="border border-gray-200 rounded-2xl px-5 py-4"
-               />
+                  )
+                }
+                className="border border-gray-200 rounded-2xl px-5 py-4 min-h-[140px]"
+              />
             </div>
 
             <div className="flex items-center justify-end gap-4 mt-8">

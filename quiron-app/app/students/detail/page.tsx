@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   addDoc,
@@ -42,7 +42,7 @@ export default function StudentDetail() {
   const [loading, setLoading] =
     useState(true);
 
-  async function loadStudent() {
+  const loadStudent = useCallback(async () => {
     if (!id) return;
 
     try {
@@ -99,7 +99,7 @@ export default function StudentDetail() {
       setLoading(false);
 
     }
-  }
+  }, [id]);
 
   async function addEvaluation() {
 
@@ -141,8 +141,10 @@ export default function StudentDetail() {
   }
 
   useEffect(() => {
-    loadStudent();
-  }, [id]);
+    queueMicrotask(() => {
+      void loadStudent();
+    });
+  }, [loadStudent]);
 
   if (loading) {
 

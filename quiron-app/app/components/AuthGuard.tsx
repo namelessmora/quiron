@@ -44,7 +44,6 @@ export default function AuthGuard({
 
         (user) => {
 
-          // LOGIN LIBRE 😌
           if (
             pathname === "/login"
           ) {
@@ -55,7 +54,6 @@ export default function AuthGuard({
 
           }
 
-          // SIN LOGIN 😭
           if (!user) {
 
             router.push(
@@ -64,7 +62,6 @@ export default function AuthGuard({
 
           }
 
-          // LOGUEADO 😮‍💨
           else {
 
             setLoading(false);
@@ -78,7 +75,7 @@ export default function AuthGuard({
     return () =>
       unsubscribe();
 
-  }, [pathname]);
+  }, [pathname, router]);
 
   if (loading) {
 

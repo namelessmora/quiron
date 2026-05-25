@@ -12,6 +12,22 @@ import {
 
 import { db } from "../lib/firebase";
 
+type ImportRow = Record<string, string | number | undefined>;
+
+type ImportedStudent = {
+  name: string;
+  university: string;
+  career: string;
+  tutor: string;
+  shift: string;
+  status: string;
+  areas: string[];
+};
+
+function textValue(value: string | number | undefined) {
+  return value === undefined ? "" : String(value);
+}
+
 export default function ImportPage() {
 
   const [loading, setLoading] =
@@ -49,10 +65,10 @@ export default function ImportPage() {
       const worksheet =
         workbook.Sheets[sheetName];
 
-      const jsonData: any[] =
+      const jsonData =
         XLSX.utils.sheet_to_json(
           worksheet
-        );
+        ) as ImportRow[];
 
       console.log(jsonData);
 
@@ -67,29 +83,34 @@ export default function ImportPage() {
         );
 
       const existingStudents:
-        Record<string, any> = {};
+        Record<string, boolean> = {};
 
       existingSnapshot.forEach((doc) => {
 
         const data = doc.data();
 
-        existingStudents[
-          data.name?.toLowerCase()
-        ] = true;
+        const name =
+          typeof data.name === "string"
+            ? data.name.toLowerCase()
+            : "";
+
+        if (name) {
+          existingStudents[name] = true;
+        }
 
       });
 
       const studentsMap:
-        Record<string, any> = {};
+        Record<string, ImportedStudent> = {};
 
       for (const row of jsonData) {
 
         console.log(row);
 
-        const name =
+        const name = textValue(
           row.Nombre ||
-          row.nombre ||
-          "";
+            row.nombre
+        );
 
         if (!name) continue;
 
@@ -97,8 +118,7 @@ export default function ImportPage() {
           name.trim();
 
         const area =
-          row.Area ||
-          row.area ||
+          textValue(row.Area || row.area) ||
           "General";
 
         if (!studentsMap[cleanName]) {
@@ -108,23 +128,19 @@ export default function ImportPage() {
             name: cleanName,
 
             university:
-              row.Universidad ||
-              row.universidad ||
+              textValue(row.Universidad || row.universidad) ||
               "Sin universidad",
 
             career:
-              row.Carrera ||
-              row.carrera ||
+              textValue(row.Carrera || row.carrera) ||
               "Sin definir",
 
             tutor:
-              row.Docente ||
-              row.docente ||
+              textValue(row.Docente || row.docente) ||
               "",
 
             shift:
-              row.Jornada ||
-              row.jornada ||
+              textValue(row.Jornada || row.jornada) ||
               "",
 
             status: "Activo",
