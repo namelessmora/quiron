@@ -1,8 +1,30 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+
+import {
+  collection,
+  getDocs,
+} from "firebase/firestore";
+
+import { db } from "./lib/firebase";
 
 export default function DashboardPage() {
+  const [totalStudents, setTotalStudents] = useState(0);
+
+  useEffect(() => {
+    loadStudents();
+  }, []);
+
+  async function loadStudents() {
+    const querySnapshot = await getDocs(
+      collection(db, "students")
+    );
+
+    setTotalStudents(querySnapshot.size);
+  }
+
   return (
     <div className="p-10">
       <h1 className="text-5xl font-bold mb-4">
@@ -20,27 +42,27 @@ export default function DashboardPage() {
           </h2>
 
           <p className="text-4xl font-bold">
-            24
+            {totalStudents}
           </p>
         </div>
 
         <div className="bg-white rounded-2xl p-6 shadow">
           <h2 className="text-gray-500 text-sm mb-2">
-            En observación
+            Plataforma
           </h2>
 
-          <p className="text-4xl font-bold text-yellow-500">
-            3
+          <p className="text-xl font-semibold">
+            Operativa
           </p>
         </div>
 
         <div className="bg-white rounded-2xl p-6 shadow">
           <h2 className="text-gray-500 text-sm mb-2">
-            Sin evaluaciones
+            Estado
           </h2>
 
-          <p className="text-4xl font-bold text-red-500">
-            5
+          <p className="text-xl font-semibold text-green-600">
+            Conectado a Firebase
           </p>
         </div>
       </div>
