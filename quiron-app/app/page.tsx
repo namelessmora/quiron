@@ -5,21 +5,17 @@ import Link from "next/link";
 export default function DashboardPage() {
   return (
     <div className="p-10">
-      <div className="flex items-center justify-between mb-10">
-        <div>
-          <h1 className="text-5xl font-bold text-gray-900">
-            Dashboard
-          </h1>
+      <div className="mb-10">
+        <h1 className="text-5xl font-bold text-gray-900">
+          Dashboard
+        </h1>
 
-          <p className="text-gray-500 mt-3 text-lg">
-            Bienvenida a Quirón ✨
-          </p>
-        </div>
+        <p className="text-gray-500 mt-3 text-lg">
+          Bienvenida a Quirón ✨
+        </p>
       </div>
 
-      {/* Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
           <p className="text-gray-500 text-sm mb-3">
             Total alumnos
@@ -63,9 +59,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Accesos rápidos */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
         <Link
           href="/students"
           className="bg-black text-white rounded-3xl p-8 hover:scale-[1.02] transition"
