@@ -15,37 +15,39 @@ type Student = {
 export default function StudentDetail({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
 
-  async function loadStudent() {
-    try {
-      const docRef = doc(
-        db,
-        "students",
-        String(params.id)
-      );
-
-      const docSnap = await getDoc(docRef);
-
-      if (docSnap.exists()) {
-        setStudent({
-          id: docSnap.id,
-          ...(docSnap.data() as Omit<Student, "id">),
-        });
-      }
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
+    async function loadStudent() {
+      try {
+        const resolvedParams = await params;
+
+        const docRef = doc(
+          db,
+          "students",
+          resolvedParams.id
+        );
+
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          setStudent({
+            id: docSnap.id,
+            ...(docSnap.data() as Omit<Student, "id">),
+          });
+        }
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
     loadStudent();
-  }, []);
+  }, [params]);
 
   if (loading) {
     return (
