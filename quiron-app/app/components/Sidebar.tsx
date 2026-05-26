@@ -53,8 +53,8 @@ export default function Sidebar() {
     },
 
     {
-      label: "Avisos",
-      href: "/alerts",
+      label: "Calendario",
+      href: "/calendar",
       visible: true,
     },
 
@@ -62,6 +62,12 @@ export default function Sidebar() {
       label: "Alumnos finalizados",
       href: "/students?view=finished",
       visible: permissions.canViewAllStudents,
+    },
+
+    {
+      label: "Avisos",
+      href: "/alerts",
+      visible: true,
     },
 
     {
