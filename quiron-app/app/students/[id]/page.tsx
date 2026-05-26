@@ -17,6 +17,8 @@ import {
 
 import { db, auth } from "../../lib/firebase";
 import { useCurrentUserPermissions } from "../../hooks/useCurrentUserPermissions";
+import { useTeacherProfiles } from "../../hooks/useTeacherProfiles";
+import { writeAuditLog } from "../../lib/audit";
 import {
   Rubric,
   rubrics,
@@ -40,7 +42,6 @@ import {
   canUserEvaluateStudent,
   hasAssignedTutors,
   studentTutorLabel,
-  teacherProfileOptions,
 } from "../../lib/tutors";
 
 type Student = {
@@ -363,8 +364,7 @@ export default function StudentDetail({
     useState<Student | null>(null);
   const { user, role, permissions } =
     useCurrentUserPermissions();
-  const teacherProfiles =
-    teacherProfileOptions();
+  const teacherProfiles = useTeacherProfiles();
 
   const [evaluations, setEvaluations] =
     useState<Evaluation[]>([]);
@@ -801,7 +801,7 @@ export default function StudentDetail({
         return;
       }
 	
-	      await addDoc(
+	      const evaluationRef = await addDoc(
         collection(
           db,
           "students",
@@ -830,6 +830,19 @@ export default function StudentDetail({
             serverTimestamp(),
         }
       );
+
+      await writeAuditLog({
+        action: "evaluation.created",
+        actorEmail: auth.currentUser?.email,
+        targetType: "evaluation",
+        targetId: evaluationRef.id,
+        targetName: evaluationTitle,
+        details: {
+          studentId: student.id,
+          studentName: student.name,
+          score: evaluationScore,
+        },
+      });
 
       const currentEvaluations =
         [...evaluations];
@@ -915,6 +928,17 @@ export default function StudentDetail({
           evaluationId
         )
       );
+
+      await writeAuditLog({
+        action: "evaluation.deleted",
+        actorEmail: auth.currentUser?.email,
+        targetType: "evaluation",
+        targetId: evaluationId,
+        targetName: student.name,
+        details: {
+          studentId: student.id,
+        },
+      });
 
       const filtered =
         evaluations.filter(
@@ -1065,6 +1089,18 @@ export default function StudentDetail({
         }
       );
 
+      await writeAuditLog({
+        action: "evaluation.updated",
+        actorEmail: auth.currentUser?.email,
+        targetType: "evaluation",
+        targetId: editingEvaluation.id,
+        targetName: editingEvaluation.title,
+        details: {
+          studentId: student.id,
+          score: editScore,
+        },
+      });
+
       const nextEvaluations =
         evaluations.map((evaluation) =>
           evaluation.id ===
@@ -1132,6 +1168,19 @@ export default function StudentDetail({
           observations: editObservations,
         }
       );
+
+      await writeAuditLog({
+        action: "student.updated",
+        actorEmail: auth.currentUser?.email,
+        targetType: "student",
+        targetId: student.id,
+        targetName: editName,
+        details: {
+          university: editUniversity,
+          areas: editAreas.join(", "),
+          tutor: nextTutor,
+        },
+      });
 
       setStudent({
         ...student,

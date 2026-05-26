@@ -1,0 +1,77 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null && request.auth.token.email != null;
+    }
+
+    function email() {
+      return request.auth.token.email;
+    }
+
+    function access() {
+      return get(/databases/$(database)/documents/userAccess/$(email())).data;
+    }
+
+    function role() {
+      return access().role;
+    }
+
+    function isAdmin() {
+      return signedIn() && role() == "admin";
+    }
+
+    function isTeacher() {
+      return signedIn() && role() == "teacher";
+    }
+
+    function isStudentOwner(student) {
+      return signedIn() && student.email == email();
+    }
+
+    function isAssignedTutor(student) {
+      return signedIn() &&
+        student.tutorEmails is list &&
+        email() in student.tutorEmails;
+    }
+
+    match /userAccess/{userEmail} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /students/{studentId} {
+      allow read: if isAdmin() ||
+        (isTeacher() && isAssignedTutor(resource.data)) ||
+        isStudentOwner(resource.data);
+      allow create, update, delete: if isAdmin();
+
+      match /evaluations/{evaluationId} {
+        allow read: if isAdmin() ||
+          (isTeacher() &&
+            isAssignedTutor(get(/databases/$(database)/documents/students/$(studentId)).data)) ||
+          isStudentOwner(get(/databases/$(database)/documents/students/$(studentId)).data);
+        allow create, update, delete: if isAdmin() ||
+          (isTeacher() &&
+            isAssignedTutor(get(/databases/$(database)/documents/students/$(studentId)).data));
+      }
+    }
+
+    match /attendance/{attendanceId} {
+      allow read: if isAdmin() ||
+        (isTeacher() &&
+          isAssignedTutor(get(/databases/$(database)/documents/students/$(resource.data.studentId)).data)) ||
+        (signedIn() && resource.data.studentEmail == email());
+      allow create: if signedIn() &&
+        request.resource.data.studentEmail == email();
+      allow update, delete: if isAdmin();
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if signedIn();
+      allow update, delete: if false;
+    }
+  }
+}

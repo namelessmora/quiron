@@ -64,8 +64,29 @@ function monthStart(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
+function weekStart(date: Date) {
+  const start = new Date(date);
+  const mondayOffset = (start.getDay() + 6) % 7;
+
+  start.setDate(start.getDate() - mondayOffset);
+
+  return new Date(start.getFullYear(), start.getMonth(), start.getDate());
+}
+
 function addMonths(date: Date, amount: number) {
   return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+}
+
+function addDays(date: Date, amount: number) {
+  const nextDate = new Date(date);
+
+  nextDate.setDate(date.getDate() + amount);
+
+  return new Date(
+    nextDate.getFullYear(),
+    nextDate.getMonth(),
+    nextDate.getDate()
+  );
 }
 
 function calendarDays(month: Date) {
@@ -81,6 +102,14 @@ function calendarDays(month: Date) {
 
     return day;
   });
+}
+
+function weekDays(date: Date) {
+  const start = weekStart(date);
+
+  return Array.from({ length: 7 }, (_, index) =>
+    addDays(start, index)
+  );
 }
 
 function rotationEvents(student: Student) {
@@ -137,6 +166,8 @@ export default function CalendarPage() {
     useState<Student[]>([]);
   const [currentMonth, setCurrentMonth] =
     useState(() => monthStart(new Date()));
+  const [viewMode, setViewMode] =
+    useState<"month" | "week">("month");
   const [loading, setLoading] =
     useState(true);
   const [error, setError] =
@@ -183,8 +214,11 @@ export default function CalendarPage() {
   );
 
   const visibleDays = useMemo(
-    () => calendarDays(currentMonth),
-    [currentMonth]
+    () =>
+      viewMode === "month"
+        ? calendarDays(currentMonth)
+        : weekDays(currentMonth),
+    [currentMonth, viewMode]
   );
 
   const eventsByDay = useMemo(
@@ -200,14 +234,12 @@ export default function CalendarPage() {
     [events]
   );
 
-  const monthEvents = useMemo(
+  const periodEvents = useMemo(
     () =>
-      events.filter(
-        (event) =>
-          event.date.getFullYear() === currentMonth.getFullYear() &&
-          event.date.getMonth() === currentMonth.getMonth()
+      events.filter((event) =>
+        visibleDays.some((day) => dateKey(day) === event.dateKey)
       ),
-    [currentMonth, events]
+    [events, visibleDays]
   );
 
   const todayKey = dateKey(new Date());
@@ -223,8 +255,8 @@ export default function CalendarPage() {
             Ingresos y egresos
           </h1>
           <p className="mt-2 max-w-3xl text-base text-slate-500">
-            Vista mensual de inicios y términos de rotación por alumno, área y
-            sala/unidad cuando esté registrada.
+            Vista mensual o semanal de inicios y términos de rotación por
+            alumno, área y sala/unidad cuando esté registrada.
           </p>
         </div>
 
@@ -240,10 +272,10 @@ export default function CalendarPage() {
       <section className="mb-6 grid gap-4 md:grid-cols-3">
         <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-semibold text-slate-400">
-            Eventos del mes
+            Eventos visibles
           </p>
           <p className="mt-2 text-3xl font-bold text-slate-900">
-            {loading ? "-" : monthEvents.length}
+            {loading ? "-" : periodEvents.length}
           </p>
         </article>
         <article className="rounded-lg border border-emerald-100 bg-emerald-50 p-5">
@@ -253,7 +285,7 @@ export default function CalendarPage() {
           <p className="mt-2 text-3xl font-bold text-emerald-900">
             {loading
               ? "-"
-              : monthEvents.filter((event) => event.type === "start").length}
+              : periodEvents.filter((event) => event.type === "start").length}
           </p>
         </article>
         <article className="rounded-lg border border-rose-100 bg-rose-50 p-5">
@@ -263,7 +295,7 @@ export default function CalendarPage() {
           <p className="mt-2 text-3xl font-bold text-rose-900">
             {loading
               ? "-"
-              : monthEvents.filter((event) => event.type === "end").length}
+              : periodEvents.filter((event) => event.type === "end").length}
           </p>
         </article>
       </section>
@@ -271,22 +303,58 @@ export default function CalendarPage() {
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-2xl font-bold capitalize text-slate-900">
-            {monthFormatter.format(currentMonth)}
+            {viewMode === "month"
+              ? monthFormatter.format(currentMonth)
+              : `Semana del ${formatRotationDate(
+                  dateKey(weekStart(currentMonth))
+                )}`}
           </h2>
 
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() =>
-                setCurrentMonth((month) => addMonths(month, -1))
-              }
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              onClick={() => setViewMode("month")}
+              className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
+                viewMode === "month"
+                  ? "bg-indigo-600 text-white"
+                  : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              }`}
             >
-              Mes anterior
+              Mes
             </button>
             <button
               type="button"
-              onClick={() => setCurrentMonth(monthStart(new Date()))}
+              onClick={() => setViewMode("week")}
+              className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
+                viewMode === "week"
+                  ? "bg-indigo-600 text-white"
+                  : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              Semana
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setCurrentMonth((month) =>
+                  viewMode === "month"
+                    ? addMonths(month, -1)
+                    : addDays(month, -7)
+                )
+              }
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setCurrentMonth(
+                  viewMode === "month"
+                    ? monthStart(new Date())
+                    : weekStart(new Date())
+                )
+              }
               className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
               Hoy
@@ -294,11 +362,15 @@ export default function CalendarPage() {
             <button
               type="button"
               onClick={() =>
-                setCurrentMonth((month) => addMonths(month, 1))
+                setCurrentMonth((month) =>
+                  viewMode === "month"
+                    ? addMonths(month, 1)
+                    : addDays(month, 7)
+                )
               }
               className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
-              Mes siguiente
+              Siguiente
             </button>
           </div>
         </div>
@@ -387,16 +459,16 @@ export default function CalendarPage() {
 
       <section className="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-xl font-bold text-slate-900">
-          Eventos del mes
+          Eventos visibles
         </h2>
 
-        {monthEvents.length === 0 && !loading ? (
+        {periodEvents.length === 0 && !loading ? (
           <p className="mt-3 text-sm text-slate-500">
-            No hay ingresos ni egresos registrados para este mes.
+            No hay ingresos ni egresos registrados para este periodo.
           </p>
         ) : (
           <div className="mt-4 grid gap-3">
-            {monthEvents.map((event) => (
+            {periodEvents.map((event) => (
               <Link
                 key={`list-${event.id}`}
                 href={`/students/${event.studentId}`}

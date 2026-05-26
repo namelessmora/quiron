@@ -10,12 +10,11 @@ import {
   roleOptions,
   universityOptions,
 } from "../data/studentOptions";
-import { db } from "../lib/firebase";
+import { useTeacherProfiles } from "../hooks/useTeacherProfiles";
+import { writeAuditLog } from "../lib/audit";
+import { auth, db } from "../lib/firebase";
 import { AreaRotation } from "../lib/rotations";
-import {
-  studentTutorLabel,
-  teacherProfileOptions,
-} from "../lib/tutors";
+import { studentTutorLabel } from "../lib/tutors";
 
 type Props = {
   onClose: () => void;
@@ -39,8 +38,7 @@ export default function StudentModal({ onClose, onSaved }: Props) {
     tutorEmails: [] as string[],
   });
 
-  const teacherProfiles =
-    teacherProfileOptions();
+  const teacherProfiles = useTeacherProfiles();
 
   function toggleArea(area: string) {
     setForm((currentForm) => {
@@ -127,7 +125,7 @@ export default function StudentModal({ onClose, onSaved }: Props) {
       setLoading(true);
       setError("");
 
-      await addDoc(collection(db, "students"), {
+      const studentRef = await addDoc(collection(db, "students"), {
         name: cleanName,
         email: form.email.trim().toLowerCase(),
         university: cleanUniversity,
@@ -158,6 +156,18 @@ export default function StudentModal({ onClose, onSaved }: Props) {
               })
             : form.tutor.trim(),
         status: "Activo",
+      });
+
+      await writeAuditLog({
+        action: "student.created",
+        actorEmail: auth.currentUser?.email,
+        targetType: "student",
+        targetId: studentRef.id,
+        targetName: cleanName,
+        details: {
+          university: cleanUniversity,
+          areas: form.areas.join(", "),
+        },
       });
 
       onSaved();

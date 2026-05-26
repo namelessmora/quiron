@@ -155,14 +155,25 @@ export default function DemoPage() {
       </section>
 
       <section className="mb-8 rounded-lg border border-indigo-100 bg-indigo-50 px-5 py-4">
-        <h2 className="text-lg font-bold text-indigo-950">
-          Antes de presentar
-        </h2>
-        <div className="mt-3 grid gap-2 text-sm text-indigo-900 md:grid-cols-2">
-          <p>Usar alumnos ficticios o anonimizados.</p>
-          <p>Tener una cuenta admin, una docente y una de alumno.</p>
-          <p>Preparar al menos un alumno con tutor asignado.</p>
-          <p>Preparar una evaluación ya guardada y otra para crear en vivo.</p>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-indigo-950">
+              Antes de presentar
+            </h2>
+            <div className="mt-3 grid gap-2 text-sm text-indigo-900 md:grid-cols-2">
+              <p>Usar alumnos ficticios o anonimizados.</p>
+              <p>Tener una cuenta admin, una docente y una de alumno.</p>
+              <p>Preparar al menos un alumno con tutor asignado.</p>
+              <p>Preparar una evaluación ya guardada y otra para crear en vivo.</p>
+            </div>
+          </div>
+
+          <Link
+            href="/demo/seed"
+            className="w-fit rounded-lg bg-indigo-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700"
+          >
+            Crear datos demo
+          </Link>
         </div>
       </section>
 

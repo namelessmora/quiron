@@ -82,6 +82,12 @@ export default function Sidebar() {
       visible: permissions.canViewAllStudents,
     },
 
+    {
+      label: "Configuración",
+      href: "/settings",
+      visible: permissions.canManageStudents,
+    },
+
   ].filter((link) => link.visible);
 
   if (pathname === "/login") {

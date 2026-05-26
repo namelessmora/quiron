@@ -9,9 +9,11 @@ import {
   serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
+import * as XLSX from "xlsx";
 
 import { useCurrentUserPermissions } from "../hooks/useCurrentUserPermissions";
 import { areaOptions } from "../data/studentOptions";
+import { writeAuditLog } from "../lib/audit";
 import { db } from "../lib/firebase";
 import {
   AreaRotation,
@@ -148,6 +150,14 @@ function downloadCsv(filename: string, rows: string[][]) {
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function downloadXlsx(filename: string, rows: string[][]) {
+  const worksheet = XLSX.utils.aoa_to_sheet(rows);
+  const workbook = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Marcaciones");
+  XLSX.writeFile(workbook, filename);
 }
 
 export default function AttendancePage() {
@@ -311,7 +321,7 @@ export default function AttendancePage() {
       const activeArea =
         studentAreaForDate(studentProfile, now);
 
-      await addDoc(collection(db, "attendance"), {
+      const attendanceRef = await addDoc(collection(db, "attendance"), {
         studentId: studentProfile.id,
         studentName: studentProfile.name,
         studentEmail: normalizeEmail(studentProfile.email),
@@ -320,6 +330,21 @@ export default function AttendancePage() {
         markedAt: serverTimestamp(),
         markedAtIso: now.toISOString(),
         markedBy: normalizeEmail(user.email),
+      });
+
+      await writeAuditLog({
+        action:
+          type === "in"
+            ? "attendance.check_in"
+            : "attendance.check_out",
+        actorEmail: user.email,
+        targetType: "attendance",
+        targetId: attendanceRef.id,
+        targetName: studentProfile.name,
+        details: {
+          studentId: studentProfile.id,
+          area: activeArea,
+        },
       });
 
       await loadAttendance();
@@ -331,8 +356,8 @@ export default function AttendancePage() {
     }
   }
 
-  function exportFilteredRecords() {
-    const rows = [
+  function exportRows() {
+    return [
       [
         "Alumno",
         "Correo",
@@ -363,10 +388,19 @@ export default function AttendancePage() {
         ];
       }),
     ];
+  }
 
+  function exportFilteredRecords() {
     downloadCsv(
       `marcaciones-${dateInputValue(new Date())}.csv`,
-      rows
+      exportRows()
+    );
+  }
+
+  function exportFilteredRecordsXlsx() {
+    downloadXlsx(
+      `marcaciones-${dateInputValue(new Date())}.xlsx`,
+      exportRows()
     );
   }
 
@@ -504,14 +538,24 @@ export default function AttendancePage() {
                 fecha o área activa según la fecha de rotación.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={exportFilteredRecords}
-              disabled={filteredRecords.length === 0}
-              className="w-fit rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Exportar CSV
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={exportFilteredRecords}
+                disabled={filteredRecords.length === 0}
+                className="w-fit rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Exportar CSV
+              </button>
+              <button
+                type="button"
+                onClick={exportFilteredRecordsXlsx}
+                disabled={filteredRecords.length === 0}
+                className="w-fit rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Exportar Excel
+              </button>
+            </div>
           </div>
 
           <div className="mt-4 grid gap-3 md:grid-cols-4">
