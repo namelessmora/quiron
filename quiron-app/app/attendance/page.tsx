@@ -11,7 +11,12 @@ import {
 } from "firebase/firestore";
 
 import { useCurrentUserPermissions } from "../hooks/useCurrentUserPermissions";
+import { areaOptions } from "../data/studentOptions";
 import { db } from "../lib/firebase";
+import {
+  AreaRotation,
+  parseLocalDate,
+} from "../lib/rotations";
 import { canUserAccessStudent } from "../lib/tutors";
 import { normalizeEmail } from "../lib/userRoles";
 
@@ -20,6 +25,9 @@ type Student = {
   name: string;
   email?: string;
   university?: string;
+  area?: string;
+  areas?: string[];
+  rotations?: AreaRotation[];
   tutor?: string;
   tutorEmails?: string[];
 };
@@ -31,10 +39,15 @@ type AttendanceRecord = {
   studentId: string;
   studentName: string;
   studentEmail?: string;
+  area?: string;
   type: AttendanceType;
   markedAt?: Timestamp | { seconds?: number } | Date | null;
   markedAtIso?: string;
   markedBy?: string;
+};
+
+type AttendanceRecordWithArea = AttendanceRecord & {
+  resolvedArea: string;
 };
 
 const attendanceFormatter = new Intl.DateTimeFormat("es-CL", {
@@ -74,6 +87,43 @@ function dateInputValue(date: Date) {
   ].join("-");
 }
 
+function dateInRotation(date: Date, rotation: AreaRotation) {
+  const startDate = parseLocalDate(rotation.startDate);
+  const endDate = parseLocalDate(rotation.endDate);
+  const dayStart = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate()
+  );
+
+  if (startDate && dayStart < startDate) return false;
+  if (endDate && dayStart > endDate) return false;
+
+  return Boolean(startDate || endDate);
+}
+
+function studentAreaForDate(student: Student | undefined, date: Date | null) {
+  if (!student || !date) return "";
+
+  const activeRotation = (student.rotations || []).find(
+    (rotation) =>
+      areaOptions.includes(rotation.area) &&
+      dateInRotation(date, rotation)
+  );
+
+  if (activeRotation) return activeRotation.area;
+
+  const validArea = (student.areas || []).find((area) =>
+    areaOptions.includes(area)
+  );
+
+  if (validArea) return validArea;
+
+  return areaOptions.includes(student.area || "")
+    ? student.area || ""
+    : "";
+}
+
 function typeLabel(type: AttendanceType) {
   return type === "in" ? "Ingreso" : "Salida";
 }
@@ -108,6 +158,8 @@ export default function AttendancePage() {
   const [records, setRecords] =
     useState<AttendanceRecord[]>([]);
   const [selectedStudentId, setSelectedStudentId] =
+    useState("");
+  const [selectedArea, setSelectedArea] =
     useState("");
   const [startDate, setStartDate] =
     useState("");
@@ -181,9 +233,28 @@ export default function AttendancePage() {
     [students, user?.email]
   );
 
+  const recordsWithArea = useMemo<AttendanceRecordWithArea[]>(
+    () =>
+      records.map((record) => {
+        const recordDate = attendanceDate(record);
+        const student = students.find(
+          (currentStudent) =>
+            currentStudent.id === record.studentId
+        );
+
+        return {
+          ...record,
+          resolvedArea:
+            record.area ||
+            studentAreaForDate(student, recordDate),
+        };
+      }),
+    [records, students]
+  );
+
   const filteredRecords = useMemo(
     () =>
-      records.filter((record) => {
+      recordsWithArea.filter((record) => {
         const recordDate = attendanceDate(record);
         const recordDateValue =
           recordDate ? dateInputValue(recordDate) : "";
@@ -191,30 +262,38 @@ export default function AttendancePage() {
         return (
           (!selectedStudentId ||
             record.studentId === selectedStudentId) &&
+          (!selectedArea ||
+            record.resolvedArea === selectedArea) &&
           (!startDate || recordDateValue >= startDate) &&
           (!endDate || recordDateValue <= endDate)
         );
       }),
-    [endDate, records, selectedStudentId, startDate]
+    [
+      endDate,
+      recordsWithArea,
+      selectedArea,
+      selectedStudentId,
+      startDate,
+    ]
   );
 
   const todayRecords = useMemo(() => {
     const today = dateInputValue(new Date());
 
-    return records.filter((record) => {
+    return recordsWithArea.filter((record) => {
       const recordDate = attendanceDate(record);
 
       return recordDate && dateInputValue(recordDate) === today;
     });
-  }, [records]);
+  }, [recordsWithArea]);
 
   const latestStudentRecord = useMemo(() => {
     if (!studentProfile) return null;
 
-    return records.find(
+    return recordsWithArea.find(
       (record) => record.studentId === studentProfile.id
     );
-  }, [records, studentProfile]);
+  }, [recordsWithArea, studentProfile]);
 
   async function handleMark(type: AttendanceType) {
     if (!studentProfile || !user?.email) {
@@ -229,11 +308,14 @@ export default function AttendancePage() {
       setError("");
 
       const now = new Date();
+      const activeArea =
+        studentAreaForDate(studentProfile, now);
 
       await addDoc(collection(db, "attendance"), {
         studentId: studentProfile.id,
         studentName: studentProfile.name,
         studentEmail: normalizeEmail(studentProfile.email),
+        area: activeArea,
         type,
         markedAt: serverTimestamp(),
         markedAtIso: now.toISOString(),
@@ -254,6 +336,7 @@ export default function AttendancePage() {
       [
         "Alumno",
         "Correo",
+        "Área",
         "Tipo",
         "Fecha",
         "Hora",
@@ -265,6 +348,7 @@ export default function AttendancePage() {
         return [
           record.studentName,
           record.studentEmail || "",
+          record.resolvedArea || "",
           typeLabel(record.type),
           recordDate
             ? recordDate.toLocaleDateString("es-CL")
@@ -417,7 +501,7 @@ export default function AttendancePage() {
               </h2>
               <p className="mt-2 text-sm text-slate-500">
                 Exporta la lista completa visible o filtra antes por alumno y
-                fecha.
+                fecha o área activa según la fecha de rotación.
               </p>
             </div>
             <button
@@ -430,7 +514,7 @@ export default function AttendancePage() {
             </button>
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="mt-4 grid gap-3 md:grid-cols-4">
             <select
               value={selectedStudentId}
               onChange={(event) =>
@@ -442,6 +526,21 @@ export default function AttendancePage() {
               {students.map((student) => (
                 <option key={student.id} value={student.id}>
                   {student.name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={selectedArea}
+              onChange={(event) =>
+                setSelectedArea(event.target.value)
+              }
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+            >
+              <option value="">Todas las áreas</option>
+              {areaOptions.map((area) => (
+                <option key={area} value={area}>
+                  {area}
                 </option>
               ))}
             </select>
@@ -498,6 +597,7 @@ export default function AttendancePage() {
               <thead>
                 <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-400">
                   <th className="py-3 pr-4">Alumno</th>
+                  <th className="py-3 pr-4">Área</th>
                   <th className="py-3 pr-4">Tipo</th>
                   <th className="py-3 pr-4">Fecha y hora</th>
                   <th className="py-3 pr-4">Correo</th>
@@ -515,6 +615,11 @@ export default function AttendancePage() {
                     >
                       <td className="py-3 pr-4 font-semibold text-slate-900">
                         {record.studentName}
+                      </td>
+                      <td className="py-3 pr-4">
+                        <span className="rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700">
+                          {record.resolvedArea || "Sin área"}
+                        </span>
                       </td>
                       <td className="py-3 pr-4">
                         <span
