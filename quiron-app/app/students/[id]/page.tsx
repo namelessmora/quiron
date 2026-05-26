@@ -157,7 +157,11 @@ function studentAreas(
   const areas = [
     ...(student.areas || []),
     student.area,
-  ].filter(Boolean) as string[];
+  ].filter(
+    (area): area is string =>
+      typeof area === "string" &&
+      areaOptions.includes(area)
+  );
 
   return Array.from(new Set(areas));
 }
@@ -1134,7 +1138,7 @@ export default function StudentDetail({
     [
       ["Universidad", student.university],
       ["Carrera", student.career || "Sin definir"],
-      ["Áreas", studentAreas(student).join(", ") || "General"],
+      ["Áreas", studentAreas(student).join(", ") || "Sin área"],
       ["Rol", student.role || "-"],
       ["Modalidad", student.modality || "-"],
       ["Estado académico", getAcademicStatus(student.average).label],
@@ -1365,7 +1369,7 @@ export default function StudentDetail({
             {[
               ["Universidad", student.university || "-"],
               ["Carrera", student.career || "Sin definir"],
-              ["Áreas", studentAreas(student).join(", ") || "General"],
+              ["Áreas", studentAreas(student).join(", ") || "Sin área"],
               ["Rol", student.role || "-"],
               ["Modalidad", student.modality || "-"],
               ["Estado académico", academicStatus.label],

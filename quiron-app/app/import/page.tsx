@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 
 import { db } from "../lib/firebase";
+import { areaOptions } from "../data/studentOptions";
 
 type ImportRow = Record<string, string | number | undefined>;
 
@@ -26,6 +27,23 @@ type ImportedStudent = {
 
 function textValue(value: string | number | undefined) {
   return value === undefined ? "" : String(value);
+}
+
+function validArea(value: string) {
+  const normalizedValue = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+  return areaOptions.find(
+    (area) =>
+      area
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim() === normalizedValue
+  );
 }
 
 export default function ImportPage() {
@@ -117,9 +135,9 @@ export default function ImportPage() {
         const cleanName =
           name.trim();
 
-        const area =
-          textValue(row.Area || row.area) ||
-          "General";
+        const area = validArea(
+          textValue(row.Area || row.area)
+        );
 
         if (!studentsMap[cleanName]) {
 
@@ -145,13 +163,14 @@ export default function ImportPage() {
 
             status: "Activo",
 
-            areas: [area],
+            areas: area ? [area] : [],
 
           };
 
         } else {
 
           if (
+            area &&
             !studentsMap[
               cleanName
             ].areas.includes(area)

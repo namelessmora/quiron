@@ -45,7 +45,11 @@ function studentAreas(student: Student) {
   const areas = [
     ...(student.areas || []),
     student.area,
-  ].filter(Boolean) as string[];
+  ].filter(
+    (area): area is string =>
+      typeof area === "string" &&
+      areaOptions.includes(area)
+  );
 
   return Array.from(new Set(areas));
 }
@@ -473,7 +477,7 @@ export default function StudentsPage() {
                         {student.university || "Sin universidad"}
                       </span>
                       <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700">
-                        {studentAreas(student).join(", ") || "General"}
+                        {studentAreas(student).join(", ") || "Sin área"}
                       </span>
                       {student.career && (
                         <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700">
