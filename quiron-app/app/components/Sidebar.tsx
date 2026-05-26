@@ -58,6 +58,12 @@ export default function Sidebar() {
       visible: permissions.canViewAllStudents,
     },
 
+    {
+      label: "Demo hospital",
+      href: "/demo",
+      visible: permissions.canViewAllStudents,
+    },
+
   ].filter((link) => link.visible);
 
   if (pathname === "/login") {
