@@ -16,3 +16,13 @@ export const careerOptions = [
   "Tecnología Médica",
   "Técnico en Imagenología",
 ];
+
+export const roleOptions = [
+  "Interno",
+  "Pasante",
+];
+
+export const modalityOptions = [
+  "Diurno",
+  "4to Modificado",
+];

@@ -6,6 +6,8 @@ import { addDoc, collection } from "firebase/firestore";
 import {
   areaOptions,
   careerOptions,
+  modalityOptions,
+  roleOptions,
   universityOptions,
 } from "../data/studentOptions";
 import { db } from "../lib/firebase";
@@ -24,6 +26,8 @@ export default function StudentModal({ onClose, onSaved }: Props) {
     university: "",
     career: "",
     area: "",
+    role: "",
+    modality: "",
     tutor: "",
   });
 
@@ -46,6 +50,8 @@ export default function StudentModal({ onClose, onSaved }: Props) {
         career: form.career.trim(),
         areas: [form.area],
         area: form.area,
+        role: form.role,
+        modality: form.modality,
         tutor: form.tutor.trim(),
         status: "Activo",
       });
@@ -186,6 +192,56 @@ export default function StudentModal({ onClose, onSaved }: Props) {
               </option>
             ))}
           </select>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <select
+              value={form.role}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  role: event.target.value,
+                })
+              }
+              className="w-full rounded-lg border border-slate-200 px-4 py-3 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+            >
+              <option value="">
+                Rol
+              </option>
+
+              {roleOptions.map((role) => (
+                <option
+                  key={role}
+                  value={role}
+                >
+                  {role}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={form.modality}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  modality: event.target.value,
+                })
+              }
+              className="w-full rounded-lg border border-slate-200 px-4 py-3 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+            >
+              <option value="">
+                Modalidad
+              </option>
+
+              {modalityOptions.map((modality) => (
+                <option
+                  key={modality}
+                  value={modality}
+                >
+                  {modality}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="mt-6 flex justify-end gap-3">

@@ -23,6 +23,8 @@ import {
 import {
   areaOptions,
   careerOptions,
+  modalityOptions,
+  roleOptions,
   universityOptions,
 } from "../../data/studentOptions";
 
@@ -33,6 +35,8 @@ type Student = {
   career?: string;
   area?: string;
   areas?: string[];
+  role?: string;
+  modality?: string;
   tutor?: string;
   average?: string;
   observations?: string;
@@ -334,6 +338,14 @@ export default function StudentDetail({
 
   const [editArea, setEditArea] =
     useState("");
+
+  const [editRole, setEditRole] =
+    useState("");
+
+  const [
+    editModality,
+    setEditModality,
+  ] = useState("");
 
   const [editTutor, setEditTutor] =
     useState("");
@@ -808,17 +820,18 @@ export default function StudentDetail({
 
     try {
 
-	      await updateDoc(
-	        doc(db, "students", student.id),
-	        {
-	          name: editName,
-	          university: editUniversity,
-	          career: editCareer,
-	          area: editArea,
-            areas: editArea ? [editArea] : [],
-	          tutor: editTutor,
-	          observations:
-	 editObservations,
+      await updateDoc(
+        doc(db, "students", student.id),
+        {
+          name: editName,
+          university: editUniversity,
+          career: editCareer,
+          area: editArea,
+          areas: editArea ? [editArea] : [],
+          role: editRole,
+          modality: editModality,
+          tutor: editTutor,
+          observations: editObservations,
         }
       );
 
@@ -826,12 +839,13 @@ export default function StudentDetail({
         ...student,
         name: editName,
         university: editUniversity,
-	        career: editCareer,
-	        area: editArea,
-          areas: editArea ? [editArea] : [],
-	        tutor: editTutor,
-        observations:
-           editObservations,
+        career: editCareer,
+        area: editArea,
+        areas: editArea ? [editArea] : [],
+        role: editRole,
+        modality: editModality,
+        tutor: editTutor,
+        observations: editObservations,
       });
 
       setShowEditModal(false);
@@ -952,6 +966,8 @@ export default function StudentDetail({
       ["Universidad", student.university],
       ["Carrera", student.career || "Sin definir"],
       ["Área", student.area || "General"],
+      ["Rol", student.role || "-"],
+      ["Modalidad", student.modality || "-"],
       ["Tutor", student.tutor || "-"],
       ["Promedio", student.average || "-"],
     ].forEach(([label, value]) => {
@@ -1153,6 +1169,8 @@ export default function StudentDetail({
               setEditUniversity(student.university || "");
               setEditCareer(student.career || "");
               setEditArea(student.area || "");
+              setEditRole(student.role || "");
+              setEditModality(student.modality || "");
               setEditTutor(student.tutor || "");
               setEditObservations(student.observations || "");
               setShowEditModal(true);
@@ -1176,6 +1194,8 @@ export default function StudentDetail({
               ["Universidad", student.university || "-"],
               ["Carrera", student.career || "Sin definir"],
               ["Área", student.area || "General"],
+              ["Rol", student.role || "-"],
+              ["Modalidad", student.modality || "-"],
               ["Tutor", student.tutor || "-"],
             ].map(([label, value]) => (
               <div
@@ -1734,6 +1754,52 @@ export default function StudentDetail({
                     value={area}
                   >
                     {area}
+                  </option>
+                  ))}
+              </select>
+
+              <select
+                value={editRole}
+                onChange={(e) =>
+                  setEditRole(
+                    e.target.value
+                  )
+                }
+                className="border border-gray-200 rounded-2xl px-5 py-4"
+              >
+                <option value="">
+                  Rol
+                </option>
+
+                {roleOptions.map((role) => (
+                  <option
+                    key={role}
+                    value={role}
+                  >
+                    {role}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={editModality}
+                onChange={(e) =>
+                  setEditModality(
+                    e.target.value
+                  )
+                }
+                className="border border-gray-200 rounded-2xl px-5 py-4"
+              >
+                <option value="">
+                  Modalidad
+                </option>
+
+                {modalityOptions.map((modality) => (
+                  <option
+                    key={modality}
+                    value={modality}
+                  >
+                    {modality}
                   </option>
                 ))}
               </select>
