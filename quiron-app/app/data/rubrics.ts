@@ -7,8 +7,15 @@ export type RubricOption = {
 export type RubricCriterion = {
   id: string;
   dimension: string;
+  group?: string;
   title: string;
   options: RubricOption[];
+};
+
+export type RubricGradeGroup = {
+  id: string;
+  label: string;
+  weight: number;
 };
 
 export type Rubric = {
@@ -20,6 +27,9 @@ export type Rubric = {
   scale: number;
   maxScore: number;
   passingScore: number;
+  gradeStrategy?: "percentageScale" | "weightedAverageScore";
+  gradeGroups?: RubricGradeGroup[];
+  excludeFromGradeLabels?: string[];
   criticalCriteria: string[];
   criteria: RubricCriterion[];
 };
@@ -47,7 +57,9 @@ const uboPerformanceOptions: RubricOption[] = [
 
 function criteria(
   dimension: string,
-  titles: string[]
+  titles: string[],
+  options = uboPerformanceOptions,
+  group?: string
 ) {
   return titles.map((title, index) => ({
     id: `${dimension
@@ -57,10 +69,32 @@ function criteria(
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "")}-${index + 1}`,
     dimension,
+    group,
     title,
-    options: uboPerformanceOptions,
+    options,
   }));
 }
+
+const enacOptions: RubricOption[] = [
+  {
+    label: "Logrado",
+    score: 7,
+    description:
+      "El criterio se cumple según lo esperado para la práctica laboral.",
+  },
+  {
+    label: "No logrado",
+    score: 0,
+    description:
+      "El criterio no se cumple o requiere desarrollo adicional.",
+  },
+  {
+    label: "No aplica",
+    score: 0,
+    description:
+      "El criterio no corresponde a la experiencia evaluada.",
+  },
+];
 
 const uboAttitudinalCriteria = [
   "Llega con puntualidad a la práctica.",
@@ -201,6 +235,207 @@ export const rubrics: Rubric[] = [
         "Se despide cordialmente del usuario.",
       ]),
       ...criteria("Análisis del examen", uboAnalysisCriteria),
+    ],
+  },
+  {
+    id: "enac-multiple",
+    university: "ENAC",
+    area: "Múltiple",
+    areaAliases: [
+      "Múltiple",
+      "Multiple",
+      "General",
+      "Práctica laboral",
+      "Practica laboral",
+      "Imagenología",
+      "Imagenologia",
+      "Radioterapia",
+      "Todas",
+    ],
+    name: "Pauta Práctica Laboral ENAC",
+    scale: 0,
+    maxScore: 7,
+    passingScore: 4,
+    gradeStrategy: "weightedAverageScore",
+    gradeGroups: [
+      {
+        id: "disciplinary",
+        label: "Competencias específicas y transversales",
+        weight: 0.6,
+      },
+      {
+        id: "seal",
+        label: "Competencias del perfil sello",
+        weight: 0.4,
+      },
+    ],
+    excludeFromGradeLabels: ["No aplica"],
+    criticalCriteria: [],
+    criteria: [
+      ...criteria(
+        "SALTIR201A: Asistencia al usuario en procedimientos imagenológicos",
+        [
+          "La información de la solicitud del examen es verificada frente a la persona de acuerdo con los datos de identificación, procedimiento y protocolos institucionales.",
+          "Los datos de la entrevista preliminar al usuario hecha por el profesional responsable (Mamografía o exámenes que usan medios de contraste, por ejemplo) son verificados.",
+          "Las indicaciones previas que el procedimiento requiere del usuario son verificadas, según el protocolo específico.",
+          "Las condiciones físicas que el procedimiento requiere del usuario son verificadas, según el protocolo específico.",
+          "Se verifica que el consentimiento informado se encuentra firmado.",
+          "El usuario o tutor es informado del procedimiento, indicando las acciones que se le van a realizar.",
+          "El usuario es asistido en la colocación de la bata u otros implementos requeridos por el procedimiento a realizar.",
+          "El retiro de objetos metálicos y otros que puedan interferir con la imagen se realiza antes del procedimiento.",
+          "El control de signos vitales se realiza según protocolo.",
+          "Los insumos y/o materiales requeridos son seleccionados y preparados de acuerdo al examen a realizar y la vía de administración.",
+          "Los medicamentos y/o medios de contraste son preparados según el examen a realizar y los protocolos establecidos.",
+          "El usuario es informado sobre el procedimiento a realizar.",
+          "La zona de punción es seleccionada de acuerdo a la edad del usuario, el tiempo de permanencia de la vía, la viscosidad de la solución a administrar y otros criterios establecidos por protocolo.",
+          "Los medicamentos y/o medios de contraste son administrados según examen a realizar y los protocolos establecidos.",
+          "Las reacciones adversas son informadas al profesional responsable.",
+          "Las observaciones sobre las reacciones físicas y psicológicas son reportadas al profesional responsable.",
+          "Usuarios con reacciones emocionales son contenidas psicológicamente de acuerdo al nivel de responsabilidad que su cargo le permite.",
+          "Usuarios con conductas desafiantes son contenidos psicológicamente y reportados de acuerdo a los protocolos definidos.",
+          "Las reacciones físicas del usuario durante el examen son atendidas con cuidados de enfermería.",
+          "Las indicaciones son entregadas al usuario en la etapa post examen imagenológico, verificando su comprensión.",
+          "Las dudas del usuario sobre los cuidados posteriores son resueltas, de acuerdo al nivel de responsabilidad que su cargo le permite.",
+        ],
+        enacOptions,
+        "disciplinary"
+      ),
+      ...criteria(
+        "SALTIR202A: Preparación y mantención de sala, equipos y materiales",
+        [
+          "El equipo y la sala se acondiciona para el inicio de la jornada laboral de acuerdo a protocolo establecido.",
+          "La mantención de la reveladora (carga y descarga de químicos, aseo de rodillo) se realiza según indicaciones del proveedor.",
+          "Los aditamentos de apoyo son seleccionados e instalados, de acuerdo a las características del usuario, el procedimiento imagenológico y los protocolos establecidos.",
+          "El equipo es operado de acuerdo a las indicaciones del proveedor y bajo supervisión del profesional responsable.",
+          "En exámenes radiológicos, el chasis es elegido de acuerdo a las características del usuario y del examen solicitado.",
+          "En exámenes radiológicos, el chasis o detector se coloca de acuerdo al examen solicitado y la superficie utilizada.",
+          "En Densitometría ósea, el equipo es calibrado según indicaciones del proveedor.",
+          "En Tomografía computada y Resonancia nuclear magnética, la inyectora automática de medio de contraste se arma según el examen solicitado.",
+          "En Resonancia nuclear magnética, la bobina se selecciona de acuerdo al examen solicitado.",
+          "En procedimientos imagenológicos de Ecotomografía y Medicina nuclear, el equipo específico es preparado para que el profesional realice el examen solicitado.",
+          "El área estéril es preparada para la realización de procedimientos invasivos, según protocolos establecidos.",
+          "La asistencia en el procedimiento invasivo se realiza según protocolo establecido.",
+          "Los equipos son limpiados antes y después de cada procedimiento, de acuerdo al protocolo establecido.",
+          "Los aditamentos son limpiados y ordenados al final de cada procedimiento, de acuerdo al protocolo establecido.",
+          "La sala y los equipos son limpiados y ordenados al final de la jornada según protocolos establecidos.",
+          "Los desechos biológicos, los materiales cortopunzantes y la basura común son identificados, separados y eliminados de acuerdo al protocolo establecido.",
+          "Los materiales reutilizables son identificados y enviados a esterilización, de acuerdo a protocolos establecidos.",
+        ],
+        enacOptions,
+        "disciplinary"
+      ),
+      ...criteria(
+        "SALTIR203A: Procesamiento y envío de imagen",
+        [
+          "Se verifica que la imagen digitalizada o revelada corresponde a la identidad del usuario.",
+          "Se verifica que la imagen corresponde a la solicitud de examen ejecutado.",
+          "Se verifica que la imagen contenga identificación de lateralidad, según normativa internacional.",
+          "La distribución de los exámenes para el informe se realiza según los criterios establecidos por la unidad, tipo de examen y especialidad.",
+          "En sistemas de adquisición de imágenes digitales, el examen se envía al sistema de almacenamiento y comunicación de imágenes digital.",
+          "Los datos del usuario y del procedimiento realizado son ingresados al sistema de información.",
+          "Las películas son impresas y los CDs producidos, según requerimientos.",
+          "Lenguaje técnico del área de imagenología es utilizado para comunicarse con integrantes del equipo de salud.",
+          "La información obtenida del procedimiento es archivada de acuerdo a los protocolos establecidos.",
+          "La información del usuario y los resultados de los procedimientos, son mantenidos de manera confidencial, de acuerdo con los estándares de calidad.",
+          "El uso de medicamentos y/o medios de contraste son registrados en los medios que indique la organización.",
+        ],
+        enacOptions,
+        "disciplinary"
+      ),
+      ...criteria(
+        "SALTIR204A: Medicina nuclear",
+        [
+          "La información de la solicitud del procedimiento es verificada frente a la persona de acuerdo con los datos de identificación, procedimiento y protocolos institucionales.",
+          "Las indicaciones previas que el procedimiento requiere del usuario son verificadas, según el protocolo específico.",
+          "Las condiciones físicas que el procedimiento requiere del usuario son verificadas, según el protocolo específico.",
+          "Se verifica que el consentimiento informado se encuentra firmado.",
+          "El usuario es acompañado hacia y desde la sala de procedimientos.",
+          "El usuario o tutor es informado del procedimiento, indicando las acciones que se le van a realizar.",
+          "El usuario es asistido en la colocación de la bata u otros implementos requeridos por el procedimiento a realizar.",
+          "El posicionamiento del usuario se realiza según la región anatómica a estudiar, de acuerdo al procedimiento.",
+          "El control de signos vitales se realiza según protocolo.",
+          "El cierre de puertas de salas de examen es verificado entre cada uno de los procedimientos realizados según manual de protección radiológica.",
+          "La condición de gravidez de las pacientes es verificada en cada procedimiento imagenológico, informando al profesional responsable y entregando indicaciones según manual de protección radiológica.",
+          "Las medidas de blindaje son utilizadas en cada procedimiento de acuerdo a protocolo establecido.",
+          "Las medidas de protección son informadas tanto a personal ajeno a la unidad como a usuarios.",
+          "Las medidas de protección personal establecidas en los protocolos se aplican y cumplen para evitar sobre exposiciones.",
+          "Las observaciones sobre las reacciones físicas y psicológicas del paciente son reportadas al profesional responsable.",
+          "Usuarios con reacciones emocionales son contenidas psicológicamente de acuerdo al nivel de responsabilidad que su cargo le permite.",
+          "Usuarios con conductas desafiantes son contenidos psicológicamente y reportados de acuerdo a los protocolos definidos.",
+          "Las reacciones físicas del usuario durante el procedimiento son atendidas con cuidados de enfermería.",
+          "Los cuidados del usuario y las precauciones que deben tomar por los riesgos del procedimiento de medicina nuclear se realizan de acuerdo a protocolos establecidos.",
+          "Las indicaciones son entregadas al usuario en la etapa post procedimiento, verificando su comprensión.",
+          "Las dudas del usuario sobre los cuidados posteriores son resueltas, de acuerdo al nivel de responsabilidad que su cargo le permite.",
+          "Las actividades y reacciones del usuario son registradas en los formatos establecidos por la unidad, según los protocolos establecidos.",
+          "Las medidas de protección personal establecidas en los protocolos se aplican y cumplen para evitar sobre exposiciones.",
+          "Los insumos e implementos personales utilizados por el usuario durante el procedimiento de medicina nuclear son desechados de acuerdo a los protocolos establecidos.",
+          "Los residuos biológicos radioactivos líquidos y sólidos del usuario durante el tratamiento de medicina nuclear son desechados de acuerdo a los protocolos establecidos.",
+          "Los niveles de radiación ambiental son medidos según protocolos establecidos.",
+          "Los niveles de radiación ambiental son registrados y se reporta al profesional responsable en caso de alteraciones, según nivel de referencia y protocolos establecidos.",
+        ],
+        enacOptions,
+        "disciplinary"
+      ),
+      ...criteria(
+        "SALGEN101A: IAAS, asepsia y bioseguridad",
+        [
+          "La higienización de manos se realiza según protocolos establecidos.",
+          "Las barreras protectoras se utilizan según protocolo de bioseguridad establecido en el lugar de trabajo.",
+          "El trabajo realizado respeta la delimitación de área limpia y sucia.",
+          "El depósito de eliminación de material cortopunzante es localizado y utilizado según protocolo establecido.",
+          "El depósito de eliminación de desechos de alto riesgo es localizado y utilizado según protocolo establecido.",
+          "El lavado y preparación de materiales para la esterilización se realiza según protocolos establecidos.",
+          "Los requisitos de esterilidad del material son reconocidos y revisados de acuerdo a protocolos establecidos.",
+          "Los accidentes cortopunzantes son manejados de acuerdo a protocolos establecidos derivados de las normas ministeriales.",
+        ],
+        enacOptions,
+        "disciplinary"
+      ),
+      ...criteria(
+        "ENASEL203A: Trabajar con alegría",
+        [
+          "Cumple con requerimientos de horario y asistencia predefinidos.",
+          "Realiza sus actividades obteniendo un trabajo bien hecho cumpliendo los estándares solicitados.",
+          "Demuestra un comportamiento honesto en todo su quehacer.",
+          "Cumple con los requerimientos de presentación personal asociados a las actividades y contexto asociado a la disciplina.",
+        ],
+        enacOptions,
+        "seal"
+      ),
+      ...criteria(
+        "ENASEL201A: Respeto por la dignidad de la persona",
+        [
+          "Demuestra respeto (trato personalizado y deferente) con las personas con las que interactúa en el desarrollo de las actividades.",
+          "Demuestra responsabilidad y cuidado con los datos e/o información que debe manejar en el desarrollo de sus actividades.",
+          "Demuestra respeto a los integrantes del equipo de trabajo.",
+          "Considera opiniones y punto de vista de los demás en las actividades realizadas.",
+        ],
+        enacOptions,
+        "seal"
+      ),
+      ...criteria(
+        "ENASEL202A: Espíritu de servicio y colaboración",
+        [
+          "Demuestra conducta explícita de ayuda/apoyo a los demás en su quehacer laboral.",
+          "Manifiesta una actitud proactiva para integrar equipos de trabajo.",
+          "Manifiesta actitudes colaborativas y/o solidarias con su equipo de trabajo.",
+          "Se expresa de manera adecuada y cordial aportando al funcionamiento del equipo de trabajo.",
+        ],
+        enacOptions,
+        "seal"
+      ),
+      ...criteria(
+        "ENASEL204A: Superación de sí mismo",
+        [
+          "Responde por el resultado de sus accciones de acuerdo a su ámito de acción.",
+          "Actúa de acuerdo a los conocimientos/competencias, experticia y alcances de las actividades realizadas.",
+          "Demuestra control/manejo de sus emociones frente a hechos que lo pudiesen alterar.",
+          "Demuestra interés y motivación en su aprendizaje y formación continua",
+          "Demuestra capacidad de autocrítica, reconociendo aciertos, errores, limitaciones y aspectos a mejorar.",
+        ],
+        enacOptions,
+        "seal"
+      ),
     ],
   },
 ];

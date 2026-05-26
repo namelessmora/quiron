@@ -49,6 +49,7 @@ type RubricResponse = {
   criterionId: string;
   criterion: string;
   dimension: string;
+  group?: string;
   label: string;
   score: number;
 };
@@ -131,10 +132,14 @@ function findSuggestedRubric(
       ]);
 
     const areaMatches =
-      matchesValue(student.area, [
-        rubric.area,
-        ...rubric.areaAliases,
-      ]);
+      normalizeMatchValue(rubric.area) ===
+        "multiple" &&
+      !student.area
+        ? true
+        : matchesValue(student.area, [
+            rubric.area,
+            ...rubric.areaAliases,
+          ]);
 
     return universityMatches && areaMatches;
   });
@@ -145,13 +150,62 @@ function calculateRubricGrade(
   responses: Record<string, RubricResponse>
 ) {
 
+  const excludedLabels =
+    rubric.excludeFromGradeLabels || [];
+
   const answeredCriteria =
     rubric.criteria.filter(
-      (criterion) => responses[criterion.id]
+      (criterion) =>
+        responses[criterion.id] &&
+        !excludedLabels.includes(
+          responses[criterion.id].label
+        )
     );
 
   if (answeredCriteria.length === 0) {
     return "";
+  }
+
+  if (
+    rubric.gradeStrategy ===
+      "weightedAverageScore" &&
+    rubric.gradeGroups
+  ) {
+    let weightedTotal = 0;
+    let usedWeight = 0;
+
+    rubric.gradeGroups.forEach((group) => {
+      const groupCriteria =
+        answeredCriteria.filter(
+          (criterion) =>
+            criterion.group === group.id
+        );
+
+      if (groupCriteria.length === 0) {
+        return;
+      }
+
+      const groupScore =
+        groupCriteria.reduce(
+          (total, criterion) =>
+            total +
+            responses[criterion.id].score,
+          0
+        ) / groupCriteria.length;
+
+      weightedTotal +=
+        groupScore * group.weight;
+      usedWeight += group.weight;
+    });
+
+    if (usedWeight === 0) {
+      return "";
+    }
+
+    return Math.min(
+      7,
+      Math.max(1, weightedTotal / usedWeight)
+    ).toFixed(1);
   }
 
   const totalScore =
@@ -411,6 +465,7 @@ export default function StudentDetail({
         criterionId: criterion.id,
         criterion: criterion.title,
         dimension: criterion.dimension,
+        group: criterion.group,
         label,
         score: optionScore,
       },
