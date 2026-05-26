@@ -20,9 +20,13 @@ type StudentDoc = {
   status?: string;
 };
 
-type MonthlyPoint = {
+type GradeStatus = {
+  key: "approved" | "critical" | "failed";
   label: string;
+  helper: string;
   count: number;
+  color: string;
+  textColor: string;
 };
 
 type TimelineItem = {
@@ -34,10 +38,6 @@ type TimelineItem = {
   createdBy: string;
   createdAt: Date | null;
 };
-
-const monthFormatter = new Intl.DateTimeFormat("es-CL", {
-  month: "short",
-});
 
 const timelineDateFormatter = new Intl.DateTimeFormat("es-CL", {
   day: "numeric",
@@ -64,17 +64,39 @@ function timelineTime(value: Date | null) {
   return value?.getTime() ?? 0;
 }
 
-function lastSixMonths(): MonthlyPoint[] {
-  const today = new Date();
+function parseAverage(value: StudentDoc["average"]) {
+  const numericAverage = Number(String(value ?? "").replace(",", "."));
 
-  return Array.from({ length: 6 }, (_, index) => {
-    const date = new Date(today.getFullYear(), today.getMonth() - (5 - index), 1);
+  return Number.isFinite(numericAverage) ? numericAverage : null;
+}
 
-    return {
-      label: monthFormatter.format(date).replace(".", ""),
+function emptyGradeStatus(): GradeStatus[] {
+  return [
+    {
+      key: "approved",
+      label: "Aprobados",
+      helper: "Notas 5.0 o superior",
       count: 0,
-    };
-  });
+      color: "#10b981",
+      textColor: "text-emerald-600",
+    },
+    {
+      key: "critical",
+      label: "Críticos",
+      helper: "Notas entre 4.0 y 4.9",
+      count: 0,
+      color: "#f59e0b",
+      textColor: "text-amber-600",
+    },
+    {
+      key: "failed",
+      label: "Reprobados",
+      helper: "Notas bajo 4.0",
+      count: 0,
+      color: "#f43f5e",
+      textColor: "text-rose-600",
+    },
+  ];
 }
 
 export default function DashboardPage() {
@@ -82,7 +104,8 @@ export default function DashboardPage() {
   const [evaluationsCount, setEvaluationsCount] = useState(0);
   const [average, setAverage] = useState(0);
   const [observationCount, setObservationCount] = useState(0);
-  const [monthlyData, setMonthlyData] = useState<MonthlyPoint[]>(lastSixMonths);
+  const [gradeStatus, setGradeStatus] = useState<GradeStatus[]>(emptyGradeStatus);
+  const [ungradedCount, setUngradedCount] = useState(0);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -104,9 +127,31 @@ export default function DashboardPage() {
         )
       );
 
-      const averages = students
-        .map((student) => Number(student.data.average))
-        .filter((studentAverage) => Number.isFinite(studentAverage));
+      const studentAverages = students.map((student) =>
+        parseAverage(student.data.average)
+      );
+
+      const averages = studentAverages.filter(
+        (studentAverage): studentAverage is number => studentAverage !== null
+      );
+
+      const nextGradeStatus = emptyGradeStatus();
+
+      studentAverages.forEach((studentAverage) => {
+        if (studentAverage === null) return;
+
+        if (studentAverage >= 5) {
+          nextGradeStatus[0].count += 1;
+          return;
+        }
+
+        if (studentAverage >= 4) {
+          nextGradeStatus[1].count += 1;
+          return;
+        }
+
+        nextGradeStatus[2].count += 1;
+      });
 
       const observations = students.filter((student) =>
         ["observacion", "observación"].includes(
@@ -131,29 +176,11 @@ export default function DashboardPage() {
         })
       );
 
-      const months = lastSixMonths();
-      const monthKeys = months.map((_, index) => {
-        const date = new Date();
-        date.setMonth(date.getMonth() - (5 - index), 1);
-        return `${date.getFullYear()}-${date.getMonth()}`;
-      });
-
-      evaluationDocs.forEach((evaluation) => {
-        const date = evaluation.createdAt;
-        if (!date) return;
-
-        const key = `${date.getFullYear()}-${date.getMonth()}`;
-        const monthIndex = monthKeys.indexOf(key);
-
-        if (monthIndex >= 0) {
-          months[monthIndex].count += 1;
-        }
-      });
-
       setStudentsCount(students.length);
       setEvaluationsCount(evaluationDocs.length);
       setObservationCount(observations);
-      setMonthlyData(months);
+      setGradeStatus(nextGradeStatus);
+      setUngradedCount(studentAverages.length - averages.length);
       setTimeline(
         evaluationDocs
           .sort((a, b) => {
@@ -185,9 +212,34 @@ export default function DashboardPage() {
     });
   }, [loadDashboard]);
 
-  const maxMonthlyCount = useMemo(
-    () => Math.max(...monthlyData.map((month) => month.count), 1),
-    [monthlyData]
+  const gradedStudentsCount = useMemo(
+    () => gradeStatus.reduce((total, status) => total + status.count, 0),
+    [gradeStatus]
+  );
+
+  const pieGradient = useMemo(() => {
+    if (gradedStudentsCount === 0) {
+      return "conic-gradient(#e2e8f0 0deg 360deg)";
+    }
+
+    let currentPercent = 0;
+    const segments = gradeStatus.map((status) => {
+      const start = currentPercent;
+      const end = start + (status.count / gradedStudentsCount) * 100;
+      currentPercent = end;
+
+      return `${status.color} ${start}% ${end}%`;
+    });
+
+    return `conic-gradient(${segments.join(", ")})`;
+  }, [gradeStatus, gradedStudentsCount]);
+
+  const mainGradeStatus = useMemo(
+    () =>
+      gradeStatus.reduce((current, status) =>
+        status.count > current.count ? status : current
+      ),
+    [gradeStatus]
   );
 
   const stats = [
@@ -265,39 +317,99 @@ export default function DashboardPage() {
             <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h2 className="text-2xl font-bold text-slate-900">
-                  Evaluaciones por mes
+                  Estado académico
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Actividad registrada durante los últimos 6 meses.
+                  Distribución de alumnos según su promedio actual.
                 </p>
               </div>
-              <span className="w-fit rounded-lg bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-600">
-                Últimos 6 meses
+              <span className="w-fit rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600">
+                {loading ? "Calculando..." : `${gradedStudentsCount} con nota`}
               </span>
             </div>
 
-            <div className="flex h-72 items-end gap-3 border-b border-slate-200 pt-6">
-              {monthlyData.map((month) => {
-                const height = Math.max((month.count / maxMonthlyCount) * 100, 8);
-
-                return (
+            <div className="grid gap-8 lg:grid-cols-[300px_1fr] lg:items-center">
+              <div className="mx-auto flex w-full max-w-[300px] flex-col items-center">
+                <div
+                  className="relative grid aspect-square w-full place-items-center rounded-full shadow-inner"
+                  style={{
+                    background: loading
+                      ? "conic-gradient(#c7d2fe 0deg 130deg, #e2e8f0 130deg 360deg)"
+                      : pieGradient,
+                  }}
+                >
                   <div
-                    key={month.label}
-                    className="flex h-full flex-1 flex-col items-center justify-end gap-3"
+                    className="grid h-[62%] w-[62%] place-items-center rounded-full border border-slate-100 bg-white text-center shadow-sm"
                   >
-                    <div className="text-xs font-semibold text-slate-500">
-                      {loading ? "" : month.count}
-                    </div>
-                    <div
-                      className="w-full max-w-16 rounded-t-lg bg-indigo-500 transition-all"
-                      style={{ height: `${loading ? 35 : height}%` }}
-                    />
-                    <div className="pb-2 text-xs font-medium capitalize text-slate-400">
-                      {month.label}
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        Total
+                      </p>
+                      <p className="mt-1 text-4xl font-bold text-slate-900">
+                        {loading ? "..." : gradedStudentsCount}
+                      </p>
+                      <p className="mt-1 text-xs font-medium text-slate-400">
+                        alumnos con promedio
+                      </p>
                     </div>
                   </div>
-                );
-              })}
+                </div>
+
+                {!loading && ungradedCount > 0 && (
+                  <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-center text-sm font-medium text-slate-500">
+                    {ungradedCount} sin promedio registrado
+                  </p>
+                )}
+              </div>
+
+              <div className="grid gap-3">
+                {gradeStatus.map((status) => {
+                  const percentage =
+                    gradedStudentsCount > 0
+                      ? Math.round((status.count / gradedStudentsCount) * 100)
+                      : 0;
+
+                  return (
+                    <div
+                      key={status.key}
+                      className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-4"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-3">
+                          <span
+                            className="mt-1 h-3 w-3 rounded-full"
+                            style={{ backgroundColor: status.color }}
+                          />
+                          <div>
+                            <p className="font-semibold text-slate-900">
+                              {status.label}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-500">
+                              {status.helper}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <p className={`text-2xl font-bold ${status.textColor}`}>
+                            {loading ? "..." : status.count}
+                          </p>
+                          <p className="text-xs font-semibold text-slate-400">
+                            {loading ? "" : `${percentage}%`}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {!loading && gradedStudentsCount > 0 && (
+                  <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-700">
+                    Mayor grupo actual:{" "}
+                    <span className="font-semibold">{mainGradeStatus.label}</span>
+                  </div>
+                )}
+              </div>
             </div>
           </article>
 
