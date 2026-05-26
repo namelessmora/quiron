@@ -30,7 +30,11 @@ import {
   isStudentFinalized,
   validStudentAreas,
 } from "../lib/rotations";
-import { normalizeEmail } from "../lib/userRoles";
+import {
+  canUserAccessStudent,
+  studentTutorEmails,
+  studentTutorLabel,
+} from "../lib/tutors";
 
 type Student = {
   id: string;
@@ -43,6 +47,7 @@ type Student = {
   role?: string;
   modality?: string;
   tutor?: string;
+  tutorEmails?: string[];
   average?: string | number;
   rotations?: AreaRotation[];
 };
@@ -86,7 +91,7 @@ function evaluationMatchesArea(evaluation: EvaluationSummary, area: string) {
 
 export default function StudentsPage() {
   const searchParams = useSearchParams();
-  const { user, permissions } =
+  const { user, role, permissions } =
     useCurrentUserPermissions();
   const [students, setStudents] = useState<Student[]>([]);
   const [evaluationsByStudent, setEvaluationsByStudent] = useState<
@@ -178,9 +183,7 @@ export default function StudentsPage() {
     const query = search.trim().toLowerCase();
 
     return students.filter((student) =>
-      (permissions.canViewAllStudents ||
-        normalizeEmail(student.email) ===
-          normalizeEmail(user?.email)) &&
+      canUserAccessStudent(role, user?.email, student) &&
       (!permissions.canViewAllStudents ||
         (studentTab === "finished"
           ? isStudentFinalized(student)
@@ -193,7 +196,8 @@ export default function StudentsPage() {
         validStudentAreas(student).join(" "),
         student.role,
         student.modality,
-        student.tutor,
+        studentTutorLabel(student),
+        ...studentTutorEmails(student),
         getAcademicStatus(student.average).label,
         ...(student.areas || []),
       ]
@@ -213,7 +217,9 @@ export default function StudentsPage() {
       (!careerFilter || student.career === careerFilter) &&
       (!roleFilter || student.role === roleFilter) &&
       (!modalityFilter || student.modality === modalityFilter) &&
-      (!tutorFilter || student.tutor === tutorFilter) &&
+      (!tutorFilter ||
+        studentTutorEmails(student).includes(tutorFilter) ||
+        studentTutorLabel(student) === tutorFilter) &&
       (!academicStatusFilter ||
         getAcademicStatus(student.average).label === academicStatusFilter)
     );
@@ -229,6 +235,7 @@ export default function StudentsPage() {
     students,
     studentTab,
     tutorFilter,
+    role,
     user?.email,
     permissions.canViewAllStudents,
     universityFilter,
@@ -236,20 +243,41 @@ export default function StudentsPage() {
 
   const activeStudentsCount = useMemo(
     () =>
-      students.filter((student) => !isStudentFinalized(student)).length,
-    [students]
+      students.filter(
+        (student) =>
+          canUserAccessStudent(role, user?.email, student) &&
+          !isStudentFinalized(student)
+      ).length,
+    [role, students, user?.email]
   );
 
   const finishedStudentsCount = useMemo(
     () =>
-      students.filter((student) => isStudentFinalized(student)).length,
-    [students]
+      students.filter(
+        (student) =>
+          canUserAccessStudent(role, user?.email, student) &&
+          isStudentFinalized(student)
+      ).length,
+    [role, students, user?.email]
   );
 
   const tutorOptions = useMemo(
     () =>
       Array.from(
-        new Set(students.map((student) => student.tutor).filter(Boolean))
+        new Set(
+          students.flatMap((student) => {
+            const tutorEmails =
+              studentTutorEmails(student);
+            const tutorLabel =
+              studentTutorLabel(student);
+
+            return tutorEmails.length > 0
+              ? tutorEmails
+              : tutorLabel
+                ? [tutorLabel]
+                : [];
+          })
+        )
       ).sort((a, b) => String(a).localeCompare(String(b), "es")),
     [students]
   );
@@ -564,9 +592,9 @@ export default function StudentsPage() {
                           {student.modality}
                         </span>
                       )}
-                      {student.tutor && (
+                      {studentTutorLabel(student) && (
                         <span className="rounded-lg bg-emerald-50 px-3 py-1.5 text-sm text-emerald-700">
-                          Tutor: {student.tutor}
+                          Tutor: {studentTutorLabel(student)}
                         </span>
                       )}
                     </div>

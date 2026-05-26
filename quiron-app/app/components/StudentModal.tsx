@@ -12,6 +12,10 @@ import {
 } from "../data/studentOptions";
 import { db } from "../lib/firebase";
 import { AreaRotation } from "../lib/rotations";
+import {
+  studentTutorLabel,
+  teacherProfileOptions,
+} from "../lib/tutors";
 
 type Props = {
   onClose: () => void;
@@ -32,7 +36,11 @@ export default function StudentModal({ onClose, onSaved }: Props) {
     role: "",
     modality: "",
     tutor: "",
+    tutorEmails: [] as string[],
   });
+
+  const teacherProfiles =
+    teacherProfileOptions();
 
   function toggleArea(area: string) {
     setForm((currentForm) => {
@@ -82,6 +90,22 @@ export default function StudentModal({ onClose, onSaved }: Props) {
     });
   }
 
+  function toggleTutorEmail(email: string) {
+    setForm((currentForm) => {
+      const tutorEmails =
+        currentForm.tutorEmails.includes(email)
+          ? currentForm.tutorEmails.filter(
+              (currentEmail) => currentEmail !== email
+            )
+          : [...currentForm.tutorEmails, email];
+
+      return {
+        ...currentForm,
+        tutorEmails,
+      };
+    });
+  }
+
   async function handleSave() {
     const cleanName = form.name.trim();
     const cleanUniversity = form.university.trim();
@@ -116,7 +140,13 @@ export default function StudentModal({ onClose, onSaved }: Props) {
         }),
         role: form.role,
         modality: form.modality,
-        tutor: form.tutor.trim(),
+        tutorEmails: form.tutorEmails,
+        tutor:
+          teacherProfiles.length > 0
+            ? studentTutorLabel({
+                tutorEmails: form.tutorEmails,
+              })
+            : form.tutor.trim(),
         status: "Activo",
       });
 
@@ -232,18 +262,54 @@ export default function StudentModal({ onClose, onSaved }: Props) {
               ))}
             </select>
 
-            <input
-              type="text"
-              placeholder="Tutor"
-              value={form.tutor}
-              onChange={(event) =>
-                setForm({
-                  ...form,
-                  tutor: event.target.value,
-                })
-              }
-              className="w-full rounded-lg border border-slate-200 px-4 py-3 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-            />
+            {teacherProfiles.length > 0 ? (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-700">
+                  Tutor docente
+                </p>
+
+                <div className="mt-3 grid gap-2">
+                  {teacherProfiles.map((teacher) => {
+                    const selected =
+                      form.tutorEmails.includes(teacher.email);
+
+                    return (
+                      <label
+                        key={teacher.email}
+                        className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${
+                          selected
+                            ? "border-indigo-200 bg-indigo-50 text-indigo-700"
+                            : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() =>
+                            toggleTutorEmail(teacher.email)
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        {teacher.label}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <input
+                type="text"
+                placeholder="Tutor"
+                value={form.tutor}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    tutor: event.target.value,
+                  })
+                }
+                className="w-full rounded-lg border border-slate-200 px-4 py-3 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+              />
+            )}
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">

@@ -35,7 +35,13 @@ import {
   validStudentAreas,
   validRotations,
 } from "../../lib/rotations";
-import { normalizeEmail } from "../../lib/userRoles";
+import {
+  canUserAccessStudent,
+  canUserEvaluateStudent,
+  hasAssignedTutors,
+  studentTutorLabel,
+  teacherProfileOptions,
+} from "../../lib/tutors";
 
 type Student = {
   id: string;
@@ -48,6 +54,7 @@ type Student = {
   role?: string;
   modality?: string;
   tutor?: string;
+  tutorEmails?: string[];
   average?: string;
   observations?: string;
   rotations?: AreaRotation[];
@@ -354,8 +361,10 @@ export default function StudentDetail({
 
   const [student, setStudent] =
     useState<Student | null>(null);
-  const { user, permissions } =
+  const { user, role, permissions } =
     useCurrentUserPermissions();
+  const teacherProfiles =
+    teacherProfileOptions();
 
   const [evaluations, setEvaluations] =
     useState<Evaluation[]>([]);
@@ -439,6 +448,9 @@ export default function StudentDetail({
   const [editTutor, setEditTutor] =
     useState("");
 
+  const [editTutorEmails, setEditTutorEmails] =
+    useState<string[]>([]);
+
   const [
   editObservations,
   setEditObservations,
@@ -482,6 +494,16 @@ export default function StudentDetail({
         },
       ];
     });
+  }
+
+  function toggleEditTutorEmail(email: string) {
+    setEditTutorEmails((currentEmails) =>
+      currentEmails.includes(email)
+        ? currentEmails.filter(
+            (currentEmail) => currentEmail !== email
+          )
+        : [...currentEmails, email]
+    );
   }
 
   const loadEvaluations = useCallback(async (
@@ -642,7 +664,7 @@ export default function StudentDetail({
       }
     });
 
-    if (!student.tutor) {
+    if (!hasAssignedTutors(student)) {
       items.push("Sin tutor asignado");
     }
 
@@ -671,8 +693,17 @@ export default function StudentDetail({
         )
       : "";
 
+  const canManageCurrentEvaluations =
+    student
+      ? canUserEvaluateStudent(
+          role,
+          user?.email,
+          student
+        )
+      : permissions.canManageEvaluations;
+
   function openNewEvaluationModal(rubricId?: string) {
-    if (!permissions.canManageEvaluations) return;
+    if (!canManageCurrentEvaluations) return;
 
     if (student) {
       const suggestedRubric =
@@ -742,7 +773,7 @@ export default function StudentDetail({
   async function handleAddEvaluation() {
 
     if (!student) return;
-    if (!permissions.canManageEvaluations) return;
+    if (!canManageCurrentEvaluations) return;
 
 	    try {
 
@@ -857,7 +888,7 @@ export default function StudentDetail({
   ) {
 
     if (!student) return;
-    if (!permissions.canManageEvaluations) return;
+    if (!canManageCurrentEvaluations) return;
 
     const confirmDelete = confirm(
       "¿Eliminar evaluación?"
@@ -977,7 +1008,7 @@ export default function StudentDetail({
   function openEvaluationEditor(
     evaluation: Evaluation
   ) {
-    if (!permissions.canManageEvaluations) return;
+    if (!canManageCurrentEvaluations) return;
 
     setEditingEvaluation(evaluation);
     setEditScore(evaluation.score || "");
@@ -1000,7 +1031,7 @@ export default function StudentDetail({
   async function handleUpdateEvaluation() {
 
     if (!student || !editingEvaluation) return;
-    if (!permissions.canManageEvaluations) return;
+    if (!canManageCurrentEvaluations) return;
 
     try {
 
@@ -1067,6 +1098,12 @@ export default function StudentDetail({
           endDate: rotation?.endDate || "",
         };
       });
+      const nextTutor =
+        teacherProfiles.length > 0
+          ? studentTutorLabel({
+              tutorEmails: editTutorEmails,
+            })
+          : editTutor;
 
       await updateDoc(
         doc(db, "students", student.id),
@@ -1080,7 +1117,8 @@ export default function StudentDetail({
           rotations: nextRotations,
           role: editRole,
           modality: editModality,
-          tutor: editTutor,
+          tutorEmails: editTutorEmails,
+          tutor: nextTutor,
           observations: editObservations,
         }
       );
@@ -1096,7 +1134,8 @@ export default function StudentDetail({
         rotations: nextRotations,
         role: editRole,
         modality: editModality,
-        tutor: editTutor,
+        tutorEmails: editTutorEmails,
+        tutor: nextTutor,
         observations: editObservations,
       });
 
@@ -1222,7 +1261,7 @@ export default function StudentDetail({
       ["Rol", student.role || "-"],
       ["Modalidad", student.modality || "-"],
       ["Estado académico", getAcademicStatus(student.average).label],
-      ["Tutor", student.tutor || "-"],
+      ["Tutor", studentTutorLabel(student) || "-"],
       ["Promedio", student.average || "-"],
     ].forEach(([label, value]) => {
       addText(`${label}: ${value}`, {
@@ -1388,9 +1427,7 @@ export default function StudentDetail({
 
   const academicStatus = getAcademicStatus(student.average);
   const canViewStudent =
-    permissions.canViewAllStudents ||
-    normalizeEmail(student.email) ===
-      normalizeEmail(user?.email);
+    canUserAccessStudent(role, user?.email, student);
 
   if (!canViewStudent) {
     return (
@@ -1444,6 +1481,7 @@ export default function StudentDetail({
               setEditRole(student.role || "");
               setEditModality(student.modality || "");
               setEditTutor(student.tutor || "");
+              setEditTutorEmails(student.tutorEmails || []);
               setEditObservations(student.observations || "");
               setShowEditModal(true);
             }}
@@ -1472,7 +1510,7 @@ export default function StudentDetail({
               ["Rol", student.role || "-"],
               ["Modalidad", student.modality || "-"],
               ["Estado académico", academicStatus.label],
-              ["Tutor", student.tutor || "-"],
+              ["Tutor", studentTutorLabel(student) || "-"],
             ].map(([label, value]) => (
               <div
                 key={label}
@@ -1595,7 +1633,7 @@ export default function StudentDetail({
                   ) : (
                     <div className="mt-3 flex flex-wrap gap-2">
                       {group.rubrics.map((rubric) => (
-                        permissions.canManageEvaluations ? (
+                        canManageCurrentEvaluations ? (
                           <button
                             key={rubric.id}
                             type="button"
@@ -1721,7 +1759,7 @@ export default function StudentDetail({
           <button
             onClick={() => openNewEvaluationModal()}
             className={`w-fit rounded-lg bg-indigo-600 px-5 py-3 font-semibold text-white transition hover:bg-indigo-700 ${
-              permissions.canManageEvaluations ? "" : "hidden"
+              canManageCurrentEvaluations ? "" : "hidden"
             }`}
           >
             Nueva evaluación
@@ -1788,7 +1826,7 @@ export default function StudentDetail({
                     <button
                       onClick={() => openEvaluationEditor(evaluation)}
                       className={`rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 ${
-                        permissions.canManageEvaluations ? "" : "hidden"
+                        canManageCurrentEvaluations ? "" : "hidden"
                       }`}
                     >
                       Editar
@@ -1797,7 +1835,7 @@ export default function StudentDetail({
                     <button
                       onClick={() => handleDeleteEvaluation(evaluation.id)}
                       className={`rounded-lg border border-red-100 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100 ${
-                        permissions.canManageEvaluations ? "" : "hidden"
+                        canManageCurrentEvaluations ? "" : "hidden"
                       }`}
                     >
                       Eliminar
@@ -2371,16 +2409,52 @@ export default function StudentDetail({
                 ))}
               </select>
 
-              <input
-                placeholder="Tutor"
-                value={editTutor}
-                onChange={(e) =>
-                  setEditTutor(
-                    e.target.value
-                  )
-                }
-                className="border border-gray-200 rounded-2xl px-5 py-4"
-              />
+              {teacherProfiles.length > 0 ? (
+                <div className="rounded-2xl border border-gray-200 bg-white px-5 py-4">
+                  <p className="text-sm font-semibold text-slate-700">
+                    Tutor docente
+                  </p>
+
+                  <div className="mt-3 grid gap-2">
+                    {teacherProfiles.map((teacher) => {
+                      const selected =
+                        editTutorEmails.includes(teacher.email);
+
+                      return (
+                        <label
+                          key={teacher.email}
+                          className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${
+                            selected
+                              ? "border-indigo-200 bg-indigo-50 text-indigo-700"
+                              : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={() =>
+                              toggleEditTutorEmail(teacher.email)
+                            }
+                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          {teacher.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <input
+                  placeholder="Tutor"
+                  value={editTutor}
+                  onChange={(e) =>
+                    setEditTutor(
+                      e.target.value
+                    )
+                  }
+                  className="border border-gray-200 rounded-2xl px-5 py-4"
+                />
+              )}
               <textarea
                 placeholder="Observaciones generales"
                 value={editObservations}

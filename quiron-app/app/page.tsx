@@ -11,6 +11,7 @@ import {
   parseAverage,
 } from "./lib/academicStatus";
 import { useCurrentUserPermissions } from "./hooks/useCurrentUserPermissions";
+import { canUserAccessStudent } from "./lib/tutors";
 
 type EvaluationDoc = {
   title?: string;
@@ -21,8 +22,11 @@ type EvaluationDoc = {
 
 type StudentDoc = {
   name?: string;
+  email?: string;
   average?: string | number;
   status?: string;
+  tutor?: string;
+  tutorEmails?: string[];
 };
 
 type GradeStatus = {
@@ -103,7 +107,7 @@ function emptyGradeStatus(): GradeStatus[] {
 }
 
 export default function DashboardPage() {
-  const { permissions } =
+  const { user, role, permissions } =
     useCurrentUserPermissions();
   const [studentsCount, setStudentsCount] = useState(0);
   const [evaluationsCount, setEvaluationsCount] = useState(0);
@@ -126,10 +130,18 @@ export default function DashboardPage() {
       setError("");
 
       const studentsSnapshot = await getDocs(collection(db, "students"));
-      const students = studentsSnapshot.docs.map((studentDoc) => ({
-        id: studentDoc.id,
-        data: studentDoc.data() as StudentDoc,
-      }));
+      const students = studentsSnapshot.docs
+        .map((studentDoc) => ({
+          id: studentDoc.id,
+          data: studentDoc.data() as StudentDoc,
+        }))
+        .filter((student) =>
+          canUserAccessStudent(
+            role,
+            user?.email,
+            student.data
+          )
+        );
 
       const evaluationSnapshots = await Promise.all(
         students.map((student) =>
@@ -214,7 +226,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [permissions.canViewAllStudents]);
+  }, [permissions.canViewAllStudents, role, user?.email]);
 
   useEffect(() => {
     queueMicrotask(() => {
