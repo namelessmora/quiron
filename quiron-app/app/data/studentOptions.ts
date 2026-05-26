@@ -11,3 +11,8 @@ export const areaOptions = [
   "RX",
   "Múltiple",
 ];
+
+export const careerOptions = [
+  "Tecnología Médica",
+  "Técnico en Imagenología",
+];

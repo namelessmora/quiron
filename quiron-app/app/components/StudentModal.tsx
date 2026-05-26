@@ -5,6 +5,7 @@ import { addDoc, collection } from "firebase/firestore";
 
 import {
   areaOptions,
+  careerOptions,
   universityOptions,
 } from "../data/studentOptions";
 import { db } from "../lib/firebase";
@@ -124,9 +125,7 @@ export default function StudentModal({ onClose, onSaved }: Props) {
           </select>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <input
-              type="text"
-              placeholder="Carrera"
+            <select
               value={form.career}
               onChange={(event) =>
                 setForm({
@@ -135,7 +134,20 @@ export default function StudentModal({ onClose, onSaved }: Props) {
                 })
               }
               className="w-full rounded-lg border border-slate-200 px-4 py-3 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-            />
+            >
+              <option value="">
+                Carrera
+              </option>
+
+              {careerOptions.map((career) => (
+                <option
+                  key={career}
+                  value={career}
+                >
+                  {career}
+                </option>
+              ))}
+            </select>
 
             <input
               type="text"

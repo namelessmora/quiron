@@ -22,6 +22,7 @@ import {
 } from "../../data/rubrics";
 import {
   areaOptions,
+  careerOptions,
   universityOptions,
 } from "../../data/studentOptions";
 
@@ -1743,8 +1744,7 @@ export default function StudentDetail({
                 )}
               </select>
 
-              <input
-                placeholder="Carrera"
+              <select
                 value={editCareer}
                 onChange={(e) =>
                   setEditCareer(
@@ -1752,7 +1752,20 @@ export default function StudentDetail({
                   )
                 }
                 className="border border-gray-200 rounded-2xl px-5 py-4"
-              />
+              >
+                <option value="">
+                  Carrera
+                </option>
+
+                {careerOptions.map((career) => (
+                  <option
+                    key={career}
+                    value={career}
+                  >
+                    {career}
+                  </option>
+                ))}
+              </select>
 
               <select
                 value={editArea}
