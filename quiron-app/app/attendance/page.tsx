@@ -7,9 +7,11 @@ import {
   collection,
   doc,
   getDocs,
+  query,
   serverTimestamp,
   Timestamp,
   updateDoc,
+  where,
 } from "firebase/firestore";
 import * as XLSX from "xlsx";
 
@@ -226,6 +228,7 @@ export default function AttendancePage() {
     () => parseLocalDate(selectedDate) || new Date(),
     [selectedDate]
   );
+  const userEmail = normalizeEmail(user?.email);
   const canManageAttendance =
     role === "admin" || role === "teacher";
 
@@ -234,27 +237,67 @@ export default function AttendancePage() {
       setLoading(true);
       setError("");
 
-      const studentsSnapshot =
-        await getDocs(collection(db, "students"));
+      const studentsQuery =
+        role === "admin"
+          ? collection(db, "students")
+          : role === "teacher"
+            ? query(
+                collection(db, "students"),
+                where("tutorEmails", "array-contains", userEmail)
+              )
+            : query(
+                collection(db, "students"),
+                where("email", "==", userEmail)
+              );
+      const studentsSnapshot = await getDocs(studentsQuery);
       const visibleStudents = studentsSnapshot.docs
         .map((studentDoc) => ({
           id: studentDoc.id,
           ...(studentDoc.data() as Omit<Student, "id">),
         }))
         .filter((student) =>
-          canUserAccessStudent(role, user?.email, student)
+          canUserAccessStudent(role, userEmail, student)
         )
         .sort((a, b) => a.name.localeCompare(b.name, "es"));
-      const attendanceSnapshot =
-        await getDocs(collection(db, "attendance"));
       const visibleStudentIds = new Set(
         visibleStudents.map((student) => student.id)
       );
-      const visibleRecords = attendanceSnapshot.docs
-        .map((recordDoc) => ({
-          id: recordDoc.id,
-          ...(recordDoc.data() as Omit<AttendanceRecord, "id">),
-        }))
+
+      if (visibleStudentIds.size === 0) {
+        setStudents(visibleStudents);
+        setRecords([]);
+        return;
+      }
+
+      const attendanceSnapshots =
+        role === "admin"
+          ? [await getDocs(collection(db, "attendance"))]
+          : await Promise.all(
+              Array.from(visibleStudentIds)
+                .reduce<string[][]>((chunks, studentId, index) => {
+                  const chunkIndex = Math.floor(index / 30);
+
+                  chunks[chunkIndex] = chunks[chunkIndex] || [];
+                  chunks[chunkIndex].push(studentId);
+
+                  return chunks;
+                }, [])
+                .map((studentIds) =>
+                  getDocs(
+                    query(
+                      collection(db, "attendance"),
+                      where("studentId", "in", studentIds)
+                    )
+                  )
+                )
+            );
+      const visibleRecords = attendanceSnapshots
+        .flatMap((attendanceSnapshot) =>
+          attendanceSnapshot.docs.map((recordDoc) => ({
+            id: recordDoc.id,
+            ...(recordDoc.data() as Omit<AttendanceRecord, "id">),
+          }))
+        )
         .filter((record) => visibleStudentIds.has(record.studentId))
         .filter((record) => record.status === "present" || record.status === "absent")
         .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
@@ -267,7 +310,7 @@ export default function AttendancePage() {
     } finally {
       setLoading(false);
     }
-  }, [role, user?.email]);
+  }, [role, userEmail]);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -336,6 +379,8 @@ export default function AttendancePage() {
       status === "absent"
         ? nextRecoveryDate(student, rotation)
         : "";
+    const recoveryStatus: RecoveryStatus =
+      status === "absent" ? "pending" : "none";
     const payload = {
       studentId: student.id,
       studentName: student.name,
@@ -343,8 +388,7 @@ export default function AttendancePage() {
       area: rotation.area,
       date: selectedDate,
       status,
-      recoveryStatus:
-        status === "absent" ? "pending" : "none",
+      recoveryStatus,
       recoveryDate: suggestedRecovery,
       modality: rotationModality(student, rotation),
       markedBy: normalizeEmail(user.email),
@@ -354,14 +398,38 @@ export default function AttendancePage() {
     try {
       setSavingId(key);
 
+      let savedRecordId = existingRecord?.id || "";
+
       if (existingRecord) {
         await updateDoc(
           doc(db, "attendance", existingRecord.id),
           payload
         );
       } else {
-        await addDoc(collection(db, "attendance"), payload);
+        const recordRef = await addDoc(
+          collection(db, "attendance"),
+          payload
+        );
+
+        savedRecordId = recordRef.id;
       }
+
+      const savedRecord: AttendanceRecord = {
+        ...payload,
+        id: savedRecordId,
+        markedAt: new Date(),
+      };
+
+      setRecords((currentRecords) => {
+        const otherRecords = currentRecords.filter(
+          (record) =>
+            `${record.studentId}-${record.date}-${record.area}` !== key
+        );
+
+        return [savedRecord, ...otherRecords].sort((a, b) =>
+          (b.date || "").localeCompare(a.date || "")
+        );
+      });
 
       await writeAuditLog({
         action:
@@ -378,7 +446,7 @@ export default function AttendancePage() {
           recoveryDate: suggestedRecovery,
         },
       });
-      await loadAttendance();
+      void loadAttendance();
     } catch (saveError) {
       console.error(saveError);
       setError("No se pudo guardar la asistencia.");
