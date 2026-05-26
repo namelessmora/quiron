@@ -197,6 +197,47 @@ function rubricMatchesStudent(
     return universityMatches && areaMatches;
 }
 
+function rubricMatchesArea(
+  rubric: Rubric,
+  area: string
+) {
+  return matchesValue(area, [
+    rubric.area,
+    ...rubric.areaAliases,
+  ]);
+}
+
+function evaluationTime(
+  evaluation: Evaluation
+) {
+  const createdAt = evaluation.createdAt;
+
+  if (!createdAt) return 0;
+
+  if (createdAt instanceof Timestamp) {
+    return createdAt.toDate().getTime();
+  }
+
+  if (
+    "seconds" in createdAt &&
+    typeof createdAt.seconds === "number"
+  ) {
+    return createdAt.seconds * 1000;
+  }
+
+  return 0;
+}
+
+function evaluationUsesRubric(
+  evaluation: Evaluation,
+  rubric: Rubric
+) {
+  return (
+    evaluation.rubricId === rubric.id ||
+    evaluation.rubricName === rubric.name
+  );
+}
+
 function calculateRubricGrade(
   rubric: Rubric,
   responses: Record<string, RubricResponse>
@@ -488,6 +529,81 @@ export default function StudentDetail({
       ),
     [compatibleRubrics]
   );
+
+  const availableRubricsByArea = useMemo(() => {
+    if (!student) return [];
+
+    return studentAreas(student).map((area) => ({
+      area,
+      rubrics: compatibleRubrics.filter((rubric) =>
+        rubricMatchesArea(rubric, area)
+      ),
+    }));
+  }, [compatibleRubrics, student]);
+
+  const rubricHistory = useMemo(
+    () =>
+      compatibleRubrics.map((rubric) => {
+        const rubricEvaluations = evaluations
+          .filter((evaluation) =>
+            evaluationUsesRubric(evaluation, rubric)
+          )
+          .sort(
+            (a, b) =>
+              evaluationTime(b) - evaluationTime(a)
+          );
+
+        return {
+          rubric,
+          count: rubricEvaluations.length,
+          latestEvaluation:
+            rubricEvaluations[0] || null,
+        };
+      }),
+    [compatibleRubrics, evaluations]
+  );
+
+  const pendingItems = useMemo(() => {
+    if (!student) return [];
+
+    const items: string[] = [];
+    const areas = studentAreas(student);
+
+    areas.forEach((area) => {
+      const areaRubrics = compatibleRubrics.filter((rubric) =>
+        rubricMatchesArea(rubric, area)
+      );
+      const hasAreaEvaluation = areaRubrics.some((rubric) =>
+        evaluations.some((evaluation) =>
+          evaluationUsesRubric(evaluation, rubric)
+        )
+      );
+
+      if (areaRubrics.length > 0 && !hasAreaEvaluation) {
+        items.push(`Falta evaluación ${area}`);
+      }
+    });
+
+    if (!student.tutor) {
+      items.push("Sin tutor asignado");
+    }
+
+    const status = getAcademicStatus(student.average);
+
+    if (status.key === "ungraded") {
+      items.push("Sin promedio registrado");
+    }
+
+    if (status.key === "critical") {
+      items.push("Alumno crítico");
+    }
+
+    if (status.key === "failed") {
+      items.push("Alumno reprobado");
+    }
+
+    return items;
+  }, [compatibleRubrics, evaluations, student]);
 
   const rubricGrade =
     selectedRubric
@@ -1304,6 +1420,137 @@ export default function StudentDetail({
           </p>
         </aside>
 
+      </section>
+
+      <section className="mb-8 grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+        <article className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-900">
+                Pautas disponibles
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Pautas compatibles con la universidad y áreas del alumno.
+              </p>
+            </div>
+            <span className="w-fit rounded-lg bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-600">
+              {compatibleRubrics.length} pautas
+            </span>
+          </div>
+
+          {availableRubricsByArea.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+              No hay áreas configuradas para sugerir pautas.
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {availableRubricsByArea.map((group) => (
+                <div
+                  key={group.area}
+                  className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-4"
+                >
+                  <p className="text-sm font-bold text-slate-900">
+                    {group.area}
+                  </p>
+
+                  {group.rubrics.length === 0 ? (
+                    <p className="mt-2 text-sm text-slate-500">
+                      Sin pauta compatible para esta área.
+                    </p>
+                  ) : (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {group.rubrics.map((rubric) => (
+                        <span
+                          key={rubric.id}
+                          className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
+                        >
+                          {rubric.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </article>
+
+        <aside className="space-y-6">
+          <article className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-2xl font-bold text-slate-900">
+              Pendientes
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Señales rápidas para seguimiento académico.
+            </p>
+
+            {pendingItems.length === 0 ? (
+              <div className="mt-5 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-4 text-sm font-semibold text-emerald-700">
+                Sin pendientes detectados.
+              </div>
+            ) : (
+              <ul className="mt-5 space-y-3">
+                {pendingItems.map((item) => (
+                  <li
+                    key={item}
+                    className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700"
+                  >
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </article>
+
+          <article className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-2xl font-bold text-slate-900">
+              Historial por pauta
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Uso de las pautas compatibles en este alumno.
+            </p>
+
+            {rubricHistory.length === 0 ? (
+              <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                Sin pautas compatibles para resumir.
+              </div>
+            ) : (
+              <div className="mt-5 grid gap-3">
+                {rubricHistory.map((item) => (
+                  <div
+                    key={item.rubric.id}
+                    className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">
+                          {item.rubric.name}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {item.count === 0
+                            ? "Sin aplicaciones"
+                            : `${item.count} aplicación${item.count === 1 ? "" : "es"}`}
+                        </p>
+                      </div>
+                      <span className="rounded-lg bg-white px-3 py-1.5 text-sm font-bold text-indigo-600 ring-1 ring-indigo-100">
+                        {item.latestEvaluation?.score || "-"}
+                      </span>
+                    </div>
+
+                    {item.latestEvaluation && (
+                      <p className="mt-2 text-xs font-medium text-slate-400">
+                        Última:{" "}
+                        {formatEvaluationDate(
+                          item.latestEvaluation.createdAt
+                        )}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
+        </aside>
       </section>
 
       <section>

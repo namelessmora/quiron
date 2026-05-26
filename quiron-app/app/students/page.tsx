@@ -7,6 +7,10 @@ import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
 
 import StudentModal from "../components/StudentModal";
 import {
+  rubrics,
+  type Rubric,
+} from "../data/rubrics";
+import {
   areaOptions,
   careerOptions,
   modalityOptions,
@@ -32,6 +36,11 @@ type Student = {
   average?: string | number;
 };
 
+type EvaluationSummary = {
+  rubricId?: string;
+  rubricName?: string;
+};
+
 function studentAreas(student: Student) {
   const areas = [
     ...(student.areas || []),
@@ -41,11 +50,47 @@ function studentAreas(student: Student) {
   return Array.from(new Set(areas));
 }
 
+function normalizeMatchValue(value?: string) {
+  return (value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function areaMatchesRubric(area: string, rubric: Rubric) {
+  const normalizedArea = normalizeMatchValue(area);
+
+  return [rubric.area, ...rubric.areaAliases].some((candidate) => {
+    const normalizedCandidate = normalizeMatchValue(candidate);
+
+    return (
+      normalizedArea === normalizedCandidate ||
+      normalizedArea.includes(normalizedCandidate) ||
+      normalizedCandidate.includes(normalizedArea)
+    );
+  });
+}
+
+function evaluationMatchesArea(evaluation: EvaluationSummary, area: string) {
+  const rubric = rubrics.find(
+    (currentRubric) =>
+      currentRubric.id === evaluation.rubricId ||
+      currentRubric.name === evaluation.rubricName
+  );
+
+  return rubric ? areaMatchesRubric(area, rubric) : false;
+}
+
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
+  const [evaluationsByStudent, setEvaluationsByStudent] = useState<
+    Record<string, EvaluationSummary[]>
+  >({});
   const [search, setSearch] = useState("");
   const [universityFilter, setUniversityFilter] = useState("");
   const [areaFilter, setAreaFilter] = useState("");
+  const [areaEvaluationFilter, setAreaEvaluationFilter] = useState("");
   const [careerFilter, setCareerFilter] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [modalityFilter, setModalityFilter] = useState("");
@@ -69,7 +114,31 @@ export default function StudentsPage() {
         }))
         .sort((a, b) => a.name.localeCompare(b.name, "es"));
 
+      const evaluationSnapshots = await Promise.all(
+        data.map((student) =>
+          getDocs(collection(db, "students", student.id, "evaluations"))
+        )
+      );
+
+      const nextEvaluationsByStudent = data.reduce<
+        Record<string, EvaluationSummary[]>
+      >((summary, student, index) => {
+        summary[student.id] = evaluationSnapshots[index].docs.map(
+          (evaluationDoc) => {
+            const evaluation = evaluationDoc.data() as EvaluationSummary;
+
+            return {
+              rubricId: evaluation.rubricId,
+              rubricName: evaluation.rubricName,
+            };
+          }
+        );
+
+        return summary;
+      }, {});
+
       setStudents(data);
+      setEvaluationsByStudent(nextEvaluationsByStudent);
     } catch (loadError) {
       console.error(loadError);
       setError("No se pudo cargar la lista de alumnos.");
@@ -113,6 +182,15 @@ export default function StudentsPage() {
         .some((value) => String(value).toLowerCase().includes(query)) &&
       (!universityFilter || student.university === universityFilter) &&
       (!areaFilter || studentAreas(student).includes(areaFilter)) &&
+      (!areaEvaluationFilter ||
+        !areaFilter ||
+        (areaEvaluationFilter === "with"
+          ? (evaluationsByStudent[student.id] || []).some((evaluation) =>
+              evaluationMatchesArea(evaluation, areaFilter)
+            )
+          : !(evaluationsByStudent[student.id] || []).some((evaluation) =>
+              evaluationMatchesArea(evaluation, areaFilter)
+            ))) &&
       (!careerFilter || student.career === careerFilter) &&
       (!roleFilter || student.role === roleFilter) &&
       (!modalityFilter || student.modality === modalityFilter) &&
@@ -123,7 +201,9 @@ export default function StudentsPage() {
   }, [
     academicStatusFilter,
     areaFilter,
+    areaEvaluationFilter,
     careerFilter,
+    evaluationsByStudent,
     modalityFilter,
     roleFilter,
     search,
@@ -143,6 +223,7 @@ export default function StudentsPage() {
   const activeFilters = [
     universityFilter,
     areaFilter,
+    areaEvaluationFilter,
     careerFilter,
     roleFilter,
     modalityFilter,
@@ -154,6 +235,7 @@ export default function StudentsPage() {
     setSearch("");
     setUniversityFilter("");
     setAreaFilter("");
+    setAreaEvaluationFilter("");
     setCareerFilter("");
     setRoleFilter("");
     setModalityFilter("");
@@ -240,7 +322,12 @@ export default function StudentsPage() {
 
           <select
             value={areaFilter}
-            onChange={(event) => setAreaFilter(event.target.value)}
+            onChange={(event) => {
+              setAreaFilter(event.target.value);
+              if (!event.target.value) {
+                setAreaEvaluationFilter("");
+              }
+            }}
             className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
           >
             <option value="">Área</option>
@@ -249,6 +336,17 @@ export default function StudentsPage() {
                 {area}
               </option>
             ))}
+          </select>
+
+          <select
+            value={areaEvaluationFilter}
+            onChange={(event) => setAreaEvaluationFilter(event.target.value)}
+            disabled={!areaFilter}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+          >
+            <option value="">Evaluación por área</option>
+            <option value="with">Con evaluación del área</option>
+            <option value="without">Sin evaluación del área</option>
           </select>
 
           <select
