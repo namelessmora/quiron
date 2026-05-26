@@ -3,7 +3,9 @@
 import { useState } from "react";
 
 import {
+  GoogleAuthProvider,
   signInWithEmailAndPassword,
+  signInWithPopup,
 } from "firebase/auth";
 
 import {
@@ -24,6 +26,9 @@ export default function LoginPage() {
     useState("");
 
   const [loading, setLoading] =
+    useState(false);
+
+  const [googleLoading, setGoogleLoading] =
     useState(false);
 
   async function handleLogin() {
@@ -57,6 +62,40 @@ export default function LoginPage() {
     finally {
 
       setLoading(false);
+
+    }
+
+  }
+
+  async function handleGoogleLogin() {
+
+    try {
+
+      setGoogleLoading(true);
+
+      const provider =
+        new GoogleAuthProvider();
+
+      await signInWithPopup(
+        auth,
+        provider
+      );
+
+      router.push("/");
+
+    }
+
+    catch {
+
+      alert(
+        "No se pudo iniciar sesión con Google."
+      );
+
+    }
+
+    finally {
+
+      setGoogleLoading(false);
 
     }
 
@@ -107,13 +146,35 @@ export default function LoginPage() {
 
           <button
             onClick={handleLogin}
-            disabled={loading}
-            className="w-full bg-[#4f6ef7] text-white rounded-2xl py-4 font-medium hover:opacity-90 transition"
+            disabled={loading || googleLoading}
+            className="w-full bg-[#4f6ef7] text-white rounded-2xl py-4 font-medium hover:opacity-90 transition disabled:cursor-not-allowed disabled:opacity-60"
           >
 
             {loading
               ? "Ingresando..."
               : "Iniciar sesión"}
+
+          </button>
+
+          <div className="flex items-center gap-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-gray-300">
+            <span className="h-px flex-1 bg-gray-100" />
+            o
+            <span className="h-px flex-1 bg-gray-100" />
+          </div>
+
+          <button
+            type="button"
+            onClick={handleGoogleLogin}
+            disabled={loading || googleLoading}
+            className="flex w-full items-center justify-center gap-3 rounded-2xl border border-gray-200 bg-white py-4 font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <span className="grid h-6 w-6 place-items-center rounded-full border border-gray-200 text-sm font-bold text-[#4f6ef7]">
+              G
+            </span>
+
+            {googleLoading
+              ? "Conectando..."
+              : "Continuar con Google"}
 
           </button>
 
