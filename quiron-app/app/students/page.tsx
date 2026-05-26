@@ -32,6 +32,15 @@ type Student = {
   average?: string | number;
 };
 
+function studentAreas(student: Student) {
+  const areas = [
+    ...(student.areas || []),
+    student.area,
+  ].filter(Boolean) as string[];
+
+  return Array.from(new Set(areas));
+}
+
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [search, setSearch] = useState("");
@@ -93,7 +102,7 @@ export default function StudentsPage() {
         student.name,
         student.university,
         student.career,
-        student.area,
+        studentAreas(student).join(" "),
         student.role,
         student.modality,
         student.tutor,
@@ -103,9 +112,7 @@ export default function StudentsPage() {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query)) &&
       (!universityFilter || student.university === universityFilter) &&
-      (!areaFilter ||
-        student.area === areaFilter ||
-        student.areas?.includes(areaFilter)) &&
+      (!areaFilter || studentAreas(student).includes(areaFilter)) &&
       (!careerFilter || student.career === careerFilter) &&
       (!roleFilter || student.role === roleFilter) &&
       (!modalityFilter || student.modality === modalityFilter) &&
@@ -368,7 +375,7 @@ export default function StudentsPage() {
                         {student.university || "Sin universidad"}
                       </span>
                       <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700">
-                        {student.area || student.areas?.[0] || "General"}
+                        {studentAreas(student).join(", ") || "General"}
                       </span>
                       {student.career && (
                         <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700">

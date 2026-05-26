@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import jsPDF from "jspdf";
 
 import {
@@ -151,29 +151,50 @@ function universityCandidates(
   return candidates;
 }
 
+function studentAreas(
+  student: Student
+) {
+  const areas = [
+    ...(student.areas || []),
+    student.area,
+  ].filter(Boolean) as string[];
+
+  return Array.from(new Set(areas));
+}
+
 function findSuggestedRubric(
   student: Student
 ) {
 
-  return rubrics.find((rubric) => {
+  return rubrics.find((rubric) =>
+    rubricMatchesStudent(rubric, student)
+  );
+}
+
+function rubricMatchesStudent(
+  rubric: Rubric,
+  student: Student
+) {
     const universityMatches =
       matchesValue(
         student.university,
         universityCandidates(rubric)
       );
 
+    const areas = studentAreas(student);
     const areaMatches =
       normalizeMatchValue(rubric.area) ===
         "multiple" &&
-      !student.area
+      areas.length === 0
         ? true
-        : matchesValue(student.area, [
-            rubric.area,
-            ...rubric.areaAliases,
-          ]);
+        : areas.some((area) =>
+            matchesValue(area, [
+              rubric.area,
+              ...rubric.areaAliases,
+            ])
+          );
 
     return universityMatches && areaMatches;
-  });
 }
 
 function calculateRubricGrade(
@@ -337,8 +358,8 @@ export default function StudentDetail({
   const [editCareer, setEditCareer] =
     useState("");
 
-  const [editArea, setEditArea] =
-    useState("");
+  const [editAreas, setEditAreas] =
+    useState<string[]>([]);
 
   const [editRole, setEditRole] =
     useState("");
@@ -355,6 +376,14 @@ export default function StudentDetail({
   editObservations,
   setEditObservations,
 ] = useState("");
+
+  function toggleEditArea(area: string) {
+    setEditAreas((currentAreas) =>
+      currentAreas.includes(area)
+        ? currentAreas.filter((currentArea) => currentArea !== area)
+        : [...currentAreas, area]
+    );
+  }
 
   const loadEvaluations = useCallback(async (
     studentId: string
@@ -437,6 +466,28 @@ export default function StudentDetail({
       (rubric) =>
         rubric.id === selectedRubricId
     );
+
+  const compatibleRubrics = useMemo(
+    () =>
+      student
+        ? rubrics.filter((rubric) =>
+            rubricMatchesStudent(rubric, student)
+          )
+        : [],
+    [student]
+  );
+
+  const otherRubrics = useMemo(
+    () =>
+      rubrics.filter(
+        (rubric) =>
+          !compatibleRubrics.some(
+            (compatibleRubric) =>
+              compatibleRubric.id === rubric.id
+          )
+      ),
+    [compatibleRubrics]
+  );
 
   const rubricGrade =
     selectedRubric
@@ -820,6 +871,7 @@ export default function StudentDetail({
     if (!student) return;
 
     try {
+      const primaryArea = editAreas[0] || "";
 
       await updateDoc(
         doc(db, "students", student.id),
@@ -827,8 +879,8 @@ export default function StudentDetail({
           name: editName,
           university: editUniversity,
           career: editCareer,
-          area: editArea,
-          areas: editArea ? [editArea] : [],
+          area: primaryArea,
+          areas: editAreas,
           role: editRole,
           modality: editModality,
           tutor: editTutor,
@@ -841,8 +893,8 @@ export default function StudentDetail({
         name: editName,
         university: editUniversity,
         career: editCareer,
-        area: editArea,
-        areas: editArea ? [editArea] : [],
+        area: primaryArea,
+        areas: editAreas,
         role: editRole,
         modality: editModality,
         tutor: editTutor,
@@ -966,7 +1018,7 @@ export default function StudentDetail({
     [
       ["Universidad", student.university],
       ["Carrera", student.career || "Sin definir"],
-      ["Área", student.area || "General"],
+      ["Áreas", studentAreas(student).join(", ") || "General"],
       ["Rol", student.role || "-"],
       ["Modalidad", student.modality || "-"],
       ["Estado académico", getAcademicStatus(student.average).label],
@@ -1172,7 +1224,7 @@ export default function StudentDetail({
               setEditName(student.name || "");
               setEditUniversity(student.university || "");
               setEditCareer(student.career || "");
-              setEditArea(student.area || "");
+              setEditAreas(studentAreas(student));
               setEditRole(student.role || "");
               setEditModality(student.modality || "");
               setEditTutor(student.tutor || "");
@@ -1197,7 +1249,7 @@ export default function StudentDetail({
             {[
               ["Universidad", student.university || "-"],
               ["Carrera", student.career || "Sin definir"],
-              ["Área", student.area || "General"],
+              ["Áreas", studentAreas(student).join(", ") || "General"],
               ["Rol", student.role || "-"],
               ["Modalidad", student.modality || "-"],
               ["Estado académico", academicStatus.label],
@@ -1400,14 +1452,29 @@ export default function StudentDetail({
                   Evaluación manual
                 </option>
 
-                {rubrics.map((rubric) => (
-                  <option
-                    key={rubric.id}
-                    value={rubric.id}
-                  >
-                    {rubric.name}
-                  </option>
-                ))}
+                {compatibleRubrics.length > 0 && (
+                  <optgroup label="Pautas compatibles">
+                    {compatibleRubrics.map((rubric) => (
+                      <option
+                        key={rubric.id}
+                        value={rubric.id}
+                      >
+                        {rubric.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+
+                <optgroup label="Otras pautas">
+                  {otherRubrics.map((rubric) => (
+                    <option
+                      key={rubric.id}
+                      value={rubric.id}
+                    >
+                      {rubric.name}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
 	
 	              <input
@@ -1601,7 +1668,7 @@ export default function StudentDetail({
 
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
 
-          <div className="bg-white rounded-3xl p-8 w-full max-w-xl">
+          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl bg-white p-8">
 
             <h2 className="text-3xl font-bold mb-6 text-[#1E293B]">
               Editar evaluación
@@ -1747,28 +1814,39 @@ export default function StudentDetail({
                 ))}
               </select>
 
-              <select
-                value={editArea}
-                onChange={(e) =>
-                  setEditArea(
-                    e.target.value
-                  )
-                }
-                className="border border-gray-200 rounded-2xl px-5 py-4"
-              >
-                <option value="">
-                  Área
-                </option>
+              <div className="rounded-2xl border border-gray-200 bg-slate-50 p-4 sm:col-span-2">
+                <p className="text-sm font-semibold text-slate-700">
+                  Áreas
+                </p>
 
-                {areaOptions.map((area) => (
-                  <option
-                    key={area}
-                    value={area}
-                  >
-                    {area}
-                  </option>
-                  ))}
-              </select>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {areaOptions.map((area) => {
+                    const selected =
+                      editAreas.includes(area);
+
+                    return (
+                      <label
+                        key={area}
+                        className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${
+                          selected
+                            ? "border-indigo-200 bg-indigo-50 text-indigo-700"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-indigo-200"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() =>
+                            toggleEditArea(area)
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600"
+                        />
+                        {area}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
 
               <select
                 value={editRole}

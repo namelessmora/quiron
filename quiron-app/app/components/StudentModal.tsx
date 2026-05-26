@@ -25,18 +25,31 @@ export default function StudentModal({ onClose, onSaved }: Props) {
     name: "",
     university: "",
     career: "",
-    area: "",
+    areas: [] as string[],
     role: "",
     modality: "",
     tutor: "",
   });
 
+  function toggleArea(area: string) {
+    setForm((currentForm) => {
+      const areas = currentForm.areas.includes(area)
+        ? currentForm.areas.filter((currentArea) => currentArea !== area)
+        : [...currentForm.areas, area];
+
+      return {
+        ...currentForm,
+        areas,
+      };
+    });
+  }
+
   async function handleSave() {
     const cleanName = form.name.trim();
     const cleanUniversity = form.university.trim();
 
-    if (!cleanName || !cleanUniversity || !form.area) {
-      setError("Nombre, universidad y área son obligatorios.");
+    if (!cleanName || !cleanUniversity || form.areas.length === 0) {
+      setError("Nombre, universidad y al menos un área son obligatorios.");
       return;
     }
 
@@ -48,8 +61,8 @@ export default function StudentModal({ onClose, onSaved }: Props) {
         name: cleanName,
         university: cleanUniversity,
         career: form.career.trim(),
-        areas: [form.area],
-        area: form.area,
+        areas: form.areas,
+        area: form.areas[0],
         role: form.role,
         modality: form.modality,
         tutor: form.tutor.trim(),
@@ -67,7 +80,7 @@ export default function StudentModal({ onClose, onSaved }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
-      <div className="w-full max-w-xl rounded-lg border border-slate-200 bg-white p-6 shadow-xl">
+      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-lg border border-slate-200 bg-white p-6 shadow-xl">
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold text-slate-900">Nuevo alumno</h2>
@@ -169,29 +182,35 @@ export default function StudentModal({ onClose, onSaved }: Props) {
             />
           </div>
 
-          <select
-            value={form.area}
-            onChange={(event) =>
-              setForm({
-                ...form,
-                area: event.target.value,
-              })
-            }
-            className="w-full rounded-lg border border-slate-200 px-4 py-3 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-          >
-            <option value="">
-              Área
-            </option>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-semibold text-slate-700">
+              Áreas
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {areaOptions.map((area) => {
+                const selected = form.areas.includes(area);
 
-            {areaOptions.map((area) => (
-              <option
-                key={area}
-                value={area}
-              >
-                {area}
-              </option>
-            ))}
-          </select>
+                return (
+                  <label
+                    key={area}
+                    className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${
+                      selected
+                        ? "border-indigo-200 bg-indigo-50 text-indigo-700"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-indigo-200"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() => toggleArea(area)}
+                      className="h-4 w-4 rounded border-slate-300 text-indigo-600"
+                    />
+                    {area}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <select
