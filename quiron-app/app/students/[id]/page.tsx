@@ -16,6 +16,7 @@ import {
 } from "firebase/firestore";
 
 import { db, auth } from "../../lib/firebase";
+import { useCurrentUserPermissions } from "../../hooks/useCurrentUserPermissions";
 import {
   Rubric,
   rubrics,
@@ -34,10 +35,12 @@ import {
   validStudentAreas,
   validRotations,
 } from "../../lib/rotations";
+import { normalizeEmail } from "../../lib/userRoles";
 
 type Student = {
   id: string;
   name: string;
+  email?: string;
   university: string;
   career?: string;
   area?: string;
@@ -351,6 +354,8 @@ export default function StudentDetail({
 
   const [student, setStudent] =
     useState<Student | null>(null);
+  const { user, permissions } =
+    useCurrentUserPermissions();
 
   const [evaluations, setEvaluations] =
     useState<Evaluation[]>([]);
@@ -407,6 +412,8 @@ export default function StudentDetail({
   ] = useState("");
 
   const [editName, setEditName] =
+    useState("");
+  const [editEmail, setEditEmail] =
     useState("");
 
   const [editUniversity, setEditUniversity] =
@@ -665,6 +672,7 @@ export default function StudentDetail({
       : "";
 
   function openNewEvaluationModal(rubricId?: string) {
+    if (!permissions.canManageEvaluations) return;
 
     if (student) {
       const suggestedRubric =
@@ -734,6 +742,7 @@ export default function StudentDetail({
   async function handleAddEvaluation() {
 
     if (!student) return;
+    if (!permissions.canManageEvaluations) return;
 
 	    try {
 
@@ -848,6 +857,7 @@ export default function StudentDetail({
   ) {
 
     if (!student) return;
+    if (!permissions.canManageEvaluations) return;
 
     const confirmDelete = confirm(
       "¿Eliminar evaluación?"
@@ -967,6 +977,7 @@ export default function StudentDetail({
   function openEvaluationEditor(
     evaluation: Evaluation
   ) {
+    if (!permissions.canManageEvaluations) return;
 
     setEditingEvaluation(evaluation);
     setEditScore(evaluation.score || "");
@@ -989,6 +1000,7 @@ export default function StudentDetail({
   async function handleUpdateEvaluation() {
 
     if (!student || !editingEvaluation) return;
+    if (!permissions.canManageEvaluations) return;
 
     try {
 
@@ -1038,6 +1050,7 @@ export default function StudentDetail({
   async function handleUpdateStudent() {
 
     if (!student) return;
+    if (!permissions.canManageStudents) return;
 
     try {
       const primaryArea = editAreas[0] || "";
@@ -1059,6 +1072,7 @@ export default function StudentDetail({
         doc(db, "students", student.id),
         {
           name: editName,
+          email: editEmail.trim().toLowerCase(),
           university: editUniversity,
           career: editCareer,
           area: primaryArea,
@@ -1074,6 +1088,7 @@ export default function StudentDetail({
       setStudent({
         ...student,
         name: editName,
+        email: editEmail.trim().toLowerCase(),
         university: editUniversity,
         career: editCareer,
         area: primaryArea,
@@ -1201,6 +1216,7 @@ export default function StudentDetail({
 
     [
       ["Universidad", student.university],
+      ["Correo", student.email || "-"],
       ["Carrera", student.career || "Sin definir"],
       ["Áreas", studentAreas(student).join(", ") || "Sin área"],
       ["Rol", student.role || "-"],
@@ -1371,6 +1387,20 @@ export default function StudentDetail({
   }
 
   const academicStatus = getAcademicStatus(student.average);
+  const canViewStudent =
+    permissions.canViewAllStudents ||
+    normalizeEmail(student.email) ===
+      normalizeEmail(user?.email);
+
+  if (!canViewStudent) {
+    return (
+      <div className="mx-auto w-full max-w-3xl px-6 py-10">
+        <div className="rounded-lg border border-amber-100 bg-amber-50 p-6 text-amber-700">
+          No tienes permiso para ver esta ficha.
+        </div>
+      </div>
+    );
+  }
 
   return (
 
@@ -1406,6 +1436,7 @@ export default function StudentDetail({
           <button
             onClick={() => {
               setEditName(student.name || "");
+              setEditEmail(student.email || "");
               setEditUniversity(student.university || "");
               setEditCareer(student.career || "");
               setEditAreas(studentAreas(student));
@@ -1416,7 +1447,9 @@ export default function StudentDetail({
               setEditObservations(student.observations || "");
               setShowEditModal(true);
             }}
-            className="rounded-lg border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50"
+            className={`rounded-lg border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 ${
+              permissions.canManageStudents ? "" : "hidden"
+            }`}
           >
             Editar alumno
           </button>
@@ -1433,6 +1466,7 @@ export default function StudentDetail({
 
             {[
               ["Universidad", student.university || "-"],
+              ["Correo", student.email || "-"],
               ["Carrera", student.career || "Sin definir"],
               ["Áreas", studentAreas(student).join(", ") || "Sin área"],
               ["Rol", student.role || "-"],
@@ -1561,19 +1595,28 @@ export default function StudentDetail({
                   ) : (
                     <div className="mt-3 flex flex-wrap gap-2">
                       {group.rubrics.map((rubric) => (
-                        <button
-                          key={rubric.id}
-                          type="button"
-                          onClick={() =>
-                            openNewEvaluationModal(rubric.id)
-                          }
-                          className="rounded-lg bg-white px-3 py-2 text-left text-sm font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-indigo-50 hover:text-indigo-700 hover:ring-indigo-200"
-                        >
-                          {rubric.name}
-                          <span className="ml-2 text-xs font-bold text-indigo-600">
-                            Evaluar
+                        permissions.canManageEvaluations ? (
+                          <button
+                            key={rubric.id}
+                            type="button"
+                            onClick={() =>
+                              openNewEvaluationModal(rubric.id)
+                            }
+                            className="rounded-lg bg-white px-3 py-2 text-left text-sm font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-indigo-50 hover:text-indigo-700 hover:ring-indigo-200"
+                          >
+                            {rubric.name}
+                            <span className="ml-2 text-xs font-bold text-indigo-600">
+                              Evaluar
+                            </span>
+                          </button>
+                        ) : (
+                          <span
+                            key={rubric.id}
+                            className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
+                          >
+                            {rubric.name}
                           </span>
-                        </button>
+                        )
                       ))}
                     </div>
                   )}
@@ -1677,7 +1720,9 @@ export default function StudentDetail({
 
           <button
             onClick={() => openNewEvaluationModal()}
-            className="w-fit rounded-lg bg-indigo-600 px-5 py-3 font-semibold text-white transition hover:bg-indigo-700"
+            className={`w-fit rounded-lg bg-indigo-600 px-5 py-3 font-semibold text-white transition hover:bg-indigo-700 ${
+              permissions.canManageEvaluations ? "" : "hidden"
+            }`}
           >
             Nueva evaluación
           </button>
@@ -1742,14 +1787,18 @@ export default function StudentDetail({
 
                     <button
                       onClick={() => openEvaluationEditor(evaluation)}
-                      className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50"
+                      className={`rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 ${
+                        permissions.canManageEvaluations ? "" : "hidden"
+                      }`}
                     >
                       Editar
                     </button>
 
                     <button
                       onClick={() => handleDeleteEvaluation(evaluation.id)}
-                      className="rounded-lg border border-red-100 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100"
+                      className={`rounded-lg border border-red-100 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100 ${
+                        permissions.canManageEvaluations ? "" : "hidden"
+                      }`}
                     >
                       Eliminar
                     </button>
@@ -2115,6 +2164,18 @@ export default function StudentDetail({
                 value={editName}
                 onChange={(e) =>
                   setEditName(
+                    e.target.value
+                  )
+                }
+                className="border border-gray-200 rounded-2xl px-5 py-4"
+              />
+
+              <input
+                type="email"
+                placeholder="Correo del alumno"
+                value={editEmail}
+                onChange={(e) =>
+                  setEditEmail(
                     e.target.value
                   )
                 }

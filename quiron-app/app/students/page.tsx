@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
 
 import StudentModal from "../components/StudentModal";
+import { useCurrentUserPermissions } from "../hooks/useCurrentUserPermissions";
 import {
   rubrics,
   type Rubric,
@@ -29,10 +30,12 @@ import {
   isStudentFinalized,
   validStudentAreas,
 } from "../lib/rotations";
+import { normalizeEmail } from "../lib/userRoles";
 
 type Student = {
   id: string;
   name: string;
+  email?: string;
   university: string;
   career?: string;
   area?: string;
@@ -83,6 +86,8 @@ function evaluationMatchesArea(evaluation: EvaluationSummary, area: string) {
 
 export default function StudentsPage() {
   const searchParams = useSearchParams();
+  const { user, permissions } =
+    useCurrentUserPermissions();
   const [students, setStudents] = useState<Student[]>([]);
   const [evaluationsByStudent, setEvaluationsByStudent] = useState<
     Record<string, EvaluationSummary[]>
@@ -158,6 +163,8 @@ export default function StudentsPage() {
   }, [loadStudents]);
 
   async function handleDeleteStudent(id: string) {
+    if (!permissions.canManageStudents) return;
+
     const confirmDelete = confirm("¿Eliminar alumno?");
 
     if (!confirmDelete) return;
@@ -171,11 +178,16 @@ export default function StudentsPage() {
     const query = search.trim().toLowerCase();
 
     return students.filter((student) =>
-      (studentTab === "finished"
-        ? isStudentFinalized(student)
-        : !isStudentFinalized(student)) &&
+      (permissions.canViewAllStudents ||
+        normalizeEmail(student.email) ===
+          normalizeEmail(user?.email)) &&
+      (!permissions.canViewAllStudents ||
+        (studentTab === "finished"
+          ? isStudentFinalized(student)
+          : !isStudentFinalized(student))) &&
       [
         student.name,
+        student.email,
         student.university,
         student.career,
         validStudentAreas(student).join(" "),
@@ -217,6 +229,8 @@ export default function StudentsPage() {
     students,
     studentTab,
     tutorFilter,
+    user?.email,
+    permissions.canViewAllStudents,
     universityFilter,
   ]);
 
@@ -281,7 +295,9 @@ export default function StudentsPage() {
         <button
           type="button"
           onClick={() => setShowStudentModal(true)}
-          className="w-fit rounded-lg bg-indigo-600 px-5 py-3 font-semibold text-white transition hover:bg-indigo-700"
+          className={`w-fit rounded-lg bg-indigo-600 px-5 py-3 font-semibold text-white transition hover:bg-indigo-700 ${
+            permissions.canManageStudents ? "" : "hidden"
+          }`}
         >
           Nuevo alumno
         </button>
@@ -306,6 +322,7 @@ export default function StudentsPage() {
         </p>
       </div>
 
+      {permissions.canViewAllStudents && (
       <div className="mb-6 flex flex-wrap gap-2">
         {[
           {
@@ -336,6 +353,7 @@ export default function StudentsPage() {
           </Link>
         ))}
       </div>
+      )}
 
       <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -567,7 +585,9 @@ export default function StudentsPage() {
                     <button
                       type="button"
                       onClick={() => handleDeleteStudent(student.id)}
-                      className="rounded-lg border border-red-100 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100"
+                      className={`rounded-lg border border-red-100 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100 ${
+                        permissions.canManageStudents ? "" : "hidden"
+                      }`}
                     >
                       Eliminar
                     </button>

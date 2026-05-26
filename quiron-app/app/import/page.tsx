@@ -15,11 +15,13 @@ import {
 import { db } from "../lib/firebase";
 import { areaOptions } from "../data/studentOptions";
 import { AreaRotation } from "../lib/rotations";
+import { useCurrentUserPermissions } from "../hooks/useCurrentUserPermissions";
 
 type ImportRow = Record<string, string | number | Date | undefined>;
 
 type ImportedStudent = {
   name: string;
+  email: string;
   university: string;
   career: string;
   tutor: string;
@@ -138,6 +140,8 @@ function mergeRotations(
 }
 
 export default function ImportPage() {
+  const { permissions } =
+    useCurrentUserPermissions();
 
   const [loading, setLoading] =
     useState(false);
@@ -148,6 +152,7 @@ export default function ImportPage() {
   async function handleFileUpload(
     event: React.ChangeEvent<HTMLInputElement>
   ) {
+    if (!permissions.canImportStudents) return;
 
     try {
 
@@ -269,6 +274,11 @@ export default function ImportPage() {
           studentsMap[cleanName] = {
 
             name: cleanName,
+            email: textValue(
+              rowValue(row, ["Correo", "Email", "Mail"])
+            )
+              .trim()
+              .toLowerCase(),
 
             university:
               textValue(rowValue(row, ["Universidad"])) ||
@@ -351,6 +361,9 @@ export default function ImportPage() {
                 existingStudent.rotations || [],
                 student.rotations
               ),
+              ...(student.email
+                ? { email: student.email }
+                : {}),
             }
           );
 
@@ -398,6 +411,11 @@ export default function ImportPage() {
         Carga masiva de internos
       </p>
 
+      {!permissions.canImportStudents ? (
+        <div className="max-w-2xl rounded-3xl border border-amber-100 bg-amber-50 p-8 text-amber-700">
+          Sólo los administradores pueden importar agenda.
+        </div>
+      ) : (
       <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-10 max-w-2xl">
 
         <input
@@ -420,6 +438,7 @@ export default function ImportPage() {
         )}
 
       </div>
+      )}
 
     </main>
   );

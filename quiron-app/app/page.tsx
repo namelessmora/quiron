@@ -10,6 +10,7 @@ import {
   getAcademicStatus,
   parseAverage,
 } from "./lib/academicStatus";
+import { useCurrentUserPermissions } from "./hooks/useCurrentUserPermissions";
 
 type EvaluationDoc = {
   title?: string;
@@ -102,6 +103,8 @@ function emptyGradeStatus(): GradeStatus[] {
 }
 
 export default function DashboardPage() {
+  const { permissions } =
+    useCurrentUserPermissions();
   const [studentsCount, setStudentsCount] = useState(0);
   const [evaluationsCount, setEvaluationsCount] = useState(0);
   const [average, setAverage] = useState(0);
@@ -113,6 +116,11 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
 
   const loadDashboard = useCallback(async () => {
+    if (!permissions.canViewAllStudents) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError("");
@@ -206,7 +214,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [permissions.canViewAllStudents]);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -270,6 +278,27 @@ export default function DashboardPage() {
       color: "text-slate-900",
     },
   ];
+
+  if (!permissions.canViewAllStudents) {
+    return (
+      <div className="mx-auto w-full max-w-3xl px-6 py-10">
+        <div className="rounded-lg border border-indigo-100 bg-white p-8 shadow-sm">
+          <h1 className="text-3xl font-bold text-slate-900">
+            Perfil de alumno
+          </h1>
+          <p className="mt-3 text-slate-500">
+            Tu acceso está limitado a tus evaluaciones, notas y pautas realizadas.
+          </p>
+          <Link
+            href="/students"
+            className="mt-6 inline-flex rounded-lg bg-indigo-600 px-5 py-3 font-semibold text-white transition hover:bg-indigo-700"
+          >
+            Ver mis evaluaciones
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 lg:px-10">

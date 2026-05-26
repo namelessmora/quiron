@@ -24,6 +24,7 @@ export default function StudentModal({ onClose, onSaved }: Props) {
 
   const [form, setForm] = useState({
     name: "",
+    email: "",
     university: "",
     career: "",
     areas: [] as string[],
@@ -96,6 +97,7 @@ export default function StudentModal({ onClose, onSaved }: Props) {
 
       await addDoc(collection(db, "students"), {
         name: cleanName,
+        email: form.email.trim().toLowerCase(),
         university: cleanUniversity,
         career: form.career.trim(),
         areas: form.areas,
@@ -163,6 +165,19 @@ export default function StudentModal({ onClose, onSaved }: Props) {
               setForm({
                 ...form,
                 name: event.target.value,
+              })
+            }
+            className="w-full rounded-lg border border-slate-200 px-4 py-3 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          />
+
+          <input
+            type="email"
+            placeholder="Correo del alumno"
+            value={form.email}
+            onChange={(event) =>
+              setForm({
+                ...form,
+                email: event.target.value,
               })
             }
             className="w-full rounded-lg border border-slate-200 px-4 py-3 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"

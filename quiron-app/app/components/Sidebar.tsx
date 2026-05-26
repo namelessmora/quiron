@@ -15,6 +15,8 @@ import {
 import {
   auth,
 } from "../lib/firebase";
+import { useCurrentUserPermissions } from "../hooks/useCurrentUserPermissions";
+import { userRoleLabel } from "../lib/userRoles";
 
 export default function Sidebar() {
 
@@ -25,6 +27,8 @@ export default function Sidebar() {
 
   const router =
     useRouter();
+  const { role, permissions } =
+    useCurrentUserPermissions();
 
   async function handleLogout() {
 
@@ -39,19 +43,22 @@ export default function Sidebar() {
     {
       label: "Dashboard",
       href: "/",
+      visible: permissions.canViewAllStudents,
     },
 
     {
       label: "Alumnos activos",
       href: "/students",
+      visible: true,
     },
 
     {
       label: "Alumnos finalizados",
       href: "/students?view=finished",
+      visible: permissions.canViewAllStudents,
     },
 
-  ];
+  ].filter((link) => link.visible);
 
   if (pathname === "/login") {
     return null;
@@ -126,7 +133,7 @@ export default function Sidebar() {
           </p>
 
           <p className="text-sm text-gray-400">
-            Plataforma protegida
+            {userRoleLabel(role)}
           </p>
 
         </div>
