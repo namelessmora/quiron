@@ -107,6 +107,10 @@ function activeRotationForDate(student: Student, date: Date) {
   );
 }
 
+function rotationModality(student: Student, rotation: AreaRotation) {
+  return rotation.modality || student.modality || "Diurno";
+}
+
 function dayDifference(startDate: Date, date: Date) {
   return Math.floor(
     (date.getTime() - startDate.getTime()) /
@@ -133,7 +137,7 @@ function shouldAttend(student: Student, date: Date) {
 
   if (!rotation) return false;
 
-  if (student.modality === "4to Modificado") {
+  if (rotationModality(student, rotation) === "4to Modificado") {
     return isFourthModifiedAttendanceDay(rotation, date);
   }
 
@@ -150,7 +154,7 @@ function nextRecoveryDate(student: Student, rotation: AreaRotation) {
   let candidate = addDays(endDate, 1);
 
   for (let index = 0; index < 30; index += 1) {
-    if (student.modality === "4to Modificado") {
+    if (rotationModality(student, rotation) === "4to Modificado") {
       if (isFourthModifiedAttendanceDay(rotation, candidate)) {
         return dateInputValue(candidate);
       }
@@ -342,7 +346,7 @@ export default function AttendancePage() {
       recoveryStatus:
         status === "absent" ? "pending" : "none",
       recoveryDate: suggestedRecovery,
-      modality: student.modality || "Diurno",
+      modality: rotationModality(student, rotation),
       markedBy: normalizeEmail(user.email),
       markedAt: serverTimestamp(),
     };
@@ -627,7 +631,7 @@ export default function AttendancePage() {
                       {student.name}
                     </p>
                     <p className="mt-1 text-sm text-slate-500">
-                      {rotation.area} · {student.modality || "Diurno"}
+                      {rotation.area} · {rotationModality(student, rotation)}
                     </p>
                     {record && (
                       <p className="mt-2 text-sm font-semibold text-slate-600">

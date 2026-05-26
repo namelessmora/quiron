@@ -81,6 +81,7 @@ export default function SeedDemoPage() {
             area: "Múltiple",
             startDate: iso(startDate),
             endDate: iso(endDate),
+            modality: "Diurno",
             room: "Sala TC 2",
             studentNotice:
               "Presentarse en sala TC 2 a las 08:00 con credencial.",

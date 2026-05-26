@@ -466,7 +466,12 @@ export default function StudentDetail({
 
   function updateEditRotation(
     area: string,
-    field: "startDate" | "endDate" | "room" | "studentNotice",
+    field:
+      | "startDate"
+      | "endDate"
+      | "modality"
+      | "room"
+      | "studentNotice",
     value: string
   ) {
     setEditRotations((currentRotations) => {
@@ -491,6 +496,10 @@ export default function StudentDetail({
             field === "endDate"
               ? value
               : existingRotation?.endDate || "",
+          modality:
+            field === "modality"
+              ? value
+              : existingRotation?.modality || editModality || "",
           room:
             field === "room"
               ? value
@@ -1140,6 +1149,7 @@ export default function StudentDetail({
           area,
           startDate: rotation?.startDate || "",
           endDate: rotation?.endDate || "",
+          modality: rotation?.modality || editModality || "",
           room: rotation?.room || "",
           studentNotice: rotation?.studentNotice || "",
         };
@@ -1644,6 +1654,12 @@ export default function StudentDetail({
                     Fin:{" "}
                     <span className="font-semibold text-slate-700">
                       {formatRotationDate(rotation.endDate)}
+                    </span>
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Modalidad:{" "}
+                    <span className="font-semibold text-slate-700">
+                      {rotation.modality || student.modality || "-"}
                     </span>
                   </p>
                   {(rotation.room || rotation.studentNotice) && (
@@ -2395,7 +2411,7 @@ export default function StudentDetail({
                       return (
                         <div
                           key={area}
-                          className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[80px_1fr_1fr] sm:items-center lg:grid-cols-[80px_1fr_1fr_1fr]"
+                          className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[80px_1fr_1fr] sm:items-center lg:grid-cols-[80px_1fr_1fr_1fr_1fr]"
                         >
                           <p className="font-semibold text-slate-700">
                             {area}
@@ -2434,6 +2450,34 @@ export default function StudentDetail({
                           </label>
 
                           <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                            Modalidad
+                            <select
+                              value={rotation?.modality || editModality || ""}
+                              onChange={(event) =>
+                                updateEditRotation(
+                                  area,
+                                  "modality",
+                                  event.target.value
+                                )
+                              }
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700"
+                            >
+                              <option value="">
+                                Según alumno
+                              </option>
+
+                              {modalityOptions.map((modality) => (
+                                <option
+                                  key={modality}
+                                  value={modality}
+                                >
+                                  {modality}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
+                          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
                             Sala/unidad
                             <input
                               type="text"
@@ -2450,7 +2494,7 @@ export default function StudentDetail({
                             />
                           </label>
 
-                          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:col-span-3 lg:col-span-4">
+                          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:col-span-3 lg:col-span-5">
                             Aviso para alumno
                             <input
                               type="text"

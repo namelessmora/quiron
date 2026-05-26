@@ -133,6 +133,7 @@ function mergeRotations(
       area: rotation.area,
       startDate: rotation.startDate || previous?.startDate || "",
       endDate: rotation.endDate || previous?.endDate || "",
+      modality: rotation.modality || previous?.modality || "",
       room: rotation.room || previous?.room || "",
       studentNotice:
         rotation.studentNotice || previous?.studentNotice || "",
@@ -270,11 +271,22 @@ export default function ImportPage() {
         const studentNotice = textValue(
           rowValue(row, ["Aviso", "Aviso alumno", "Observación sala"])
         ).trim();
+        const modality = textValue(
+          rowValue(row, [
+            "Modalidad área",
+            "Modalidad area",
+            "Jornada área",
+            "Jornada area",
+            "Jornada",
+            "Modalidad",
+          ])
+        ).trim();
         const rotation = area
           ? {
               area,
               startDate,
               endDate,
+              modality,
               room,
               studentNotice,
             }
