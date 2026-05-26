@@ -59,7 +59,7 @@ export default function Sidebar() {
     },
 
     {
-      label: "Marcación",
+      label: "Asistencia",
       href: "/attendance",
       visible: true,
     },

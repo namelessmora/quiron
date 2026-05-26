@@ -63,9 +63,13 @@ service cloud.firestore {
         (isTeacher() &&
           isAssignedTutor(get(/databases/$(database)/documents/students/$(resource.data.studentId)).data)) ||
         (signedIn() && resource.data.studentEmail == email());
-      allow create: if signedIn() &&
-        request.resource.data.studentEmail == email();
-      allow update, delete: if isAdmin();
+      allow create: if isAdmin() ||
+        (isTeacher() &&
+          isAssignedTutor(get(/databases/$(database)/documents/students/$(request.resource.data.studentId)).data));
+      allow update: if isAdmin() ||
+        (isTeacher() &&
+          isAssignedTutor(get(/databases/$(database)/documents/students/$(resource.data.studentId)).data));
+      allow delete: if isAdmin();
     }
 
     match /auditLogs/{logId} {

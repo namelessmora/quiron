@@ -5,18 +5,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   addDoc,
   collection,
+  doc,
   getDocs,
   serverTimestamp,
   Timestamp,
+  updateDoc,
 } from "firebase/firestore";
 import * as XLSX from "xlsx";
 
-import { useCurrentUserPermissions } from "../hooks/useCurrentUserPermissions";
 import { areaOptions } from "../data/studentOptions";
+import { useCurrentUserPermissions } from "../hooks/useCurrentUserPermissions";
 import { writeAuditLog } from "../lib/audit";
 import { db } from "../lib/firebase";
 import {
   AreaRotation,
+  formatRotationDate,
   parseLocalDate,
 } from "../lib/rotations";
 import { canUserAccessStudent } from "../lib/tutors";
@@ -26,15 +29,16 @@ type Student = {
   id: string;
   name: string;
   email?: string;
-  university?: string;
   area?: string;
   areas?: string[];
+  modality?: string;
   rotations?: AreaRotation[];
   tutor?: string;
   tutorEmails?: string[];
 };
 
-type AttendanceType = "in" | "out";
+type AttendanceStatus = "present" | "absent";
+type RecoveryStatus = "none" | "pending" | "accepted" | "rejected" | "later";
 
 type AttendanceRecord = {
   id: string;
@@ -42,44 +46,28 @@ type AttendanceRecord = {
   studentName: string;
   studentEmail?: string;
   area?: string;
-  type: AttendanceType;
-  markedAt?: Timestamp | { seconds?: number } | Date | null;
-  markedAtIso?: string;
+  date?: string;
+  status?: AttendanceStatus;
+  recoveryStatus?: RecoveryStatus;
+  recoveryDate?: string;
+  modality?: string;
   markedBy?: string;
+  markedAt?: Timestamp | { seconds?: number } | Date | null;
+  type?: "in" | "out";
 };
 
-type AttendanceRecordWithArea = AttendanceRecord & {
-  resolvedArea: string;
+const statusLabels: Record<AttendanceStatus, string> = {
+  present: "Asistió",
+  absent: "No asistió",
 };
 
-const attendanceFormatter = new Intl.DateTimeFormat("es-CL", {
-  dateStyle: "short",
-  timeStyle: "short",
-});
-
-function attendanceDate(record: AttendanceRecord) {
-  if (record.markedAt instanceof Date) return record.markedAt;
-
-  if (record.markedAt instanceof Timestamp) {
-    return record.markedAt.toDate();
-  }
-
-  if (
-    record.markedAt &&
-    "seconds" in record.markedAt &&
-    typeof record.markedAt.seconds === "number"
-  ) {
-    return new Date(record.markedAt.seconds * 1000);
-  }
-
-  if (record.markedAtIso) {
-    const parsedDate = new Date(record.markedAtIso);
-
-    if (!Number.isNaN(parsedDate.getTime())) return parsedDate;
-  }
-
-  return null;
-}
+const recoveryLabels: Record<RecoveryStatus, string> = {
+  none: "Sin recuperación",
+  pending: "Recuperación sugerida",
+  accepted: "Recuperación aceptada",
+  rejected: "Recuperación rechazada",
+  later: "Recordar más tarde",
+};
 
 function dateInputValue(date: Date) {
   return [
@@ -89,45 +77,95 @@ function dateInputValue(date: Date) {
   ].join("-");
 }
 
+function addDays(date: Date, amount: number) {
+  const nextDate = new Date(date);
+
+  nextDate.setDate(date.getDate() + amount);
+
+  return new Date(
+    nextDate.getFullYear(),
+    nextDate.getMonth(),
+    nextDate.getDate()
+  );
+}
+
 function dateInRotation(date: Date, rotation: AreaRotation) {
   const startDate = parseLocalDate(rotation.startDate);
   const endDate = parseLocalDate(rotation.endDate);
-  const dayStart = new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate()
-  );
 
-  if (startDate && dayStart < startDate) return false;
-  if (endDate && dayStart > endDate) return false;
+  if (startDate && date < startDate) return false;
+  if (endDate && date > endDate) return false;
 
   return Boolean(startDate || endDate);
 }
 
-function studentAreaForDate(student: Student | undefined, date: Date | null) {
-  if (!student || !date) return "";
-
-  const activeRotation = (student.rotations || []).find(
+function activeRotationForDate(student: Student, date: Date) {
+  return (student.rotations || []).find(
     (rotation) =>
       areaOptions.includes(rotation.area) &&
       dateInRotation(date, rotation)
   );
-
-  if (activeRotation) return activeRotation.area;
-
-  const validArea = (student.areas || []).find((area) =>
-    areaOptions.includes(area)
-  );
-
-  if (validArea) return validArea;
-
-  return areaOptions.includes(student.area || "")
-    ? student.area || ""
-    : "";
 }
 
-function typeLabel(type: AttendanceType) {
-  return type === "in" ? "Ingreso" : "Salida";
+function dayDifference(startDate: Date, date: Date) {
+  return Math.floor(
+    (date.getTime() - startDate.getTime()) /
+      (1000 * 60 * 60 * 24)
+  );
+}
+
+function isFourthModifiedAttendanceDay(
+  rotation: AreaRotation,
+  date: Date
+) {
+  const startDate = parseLocalDate(rotation.startDate);
+
+  if (!startDate) return false;
+
+  const difference = dayDifference(startDate, date);
+  const cycleDay = ((difference % 4) + 4) % 4;
+
+  return cycleDay === 0 || cycleDay === 1;
+}
+
+function shouldAttend(student: Student, date: Date) {
+  const rotation = activeRotationForDate(student, date);
+
+  if (!rotation) return false;
+
+  if (student.modality === "4to Modificado") {
+    return isFourthModifiedAttendanceDay(rotation, date);
+  }
+
+  const weekday = date.getDay();
+
+  return weekday >= 1 && weekday <= 5;
+}
+
+function nextRecoveryDate(student: Student, rotation: AreaRotation) {
+  const endDate =
+    parseLocalDate(rotation.endDate) ||
+    parseLocalDate(rotation.startDate) ||
+    new Date();
+  let candidate = addDays(endDate, 1);
+
+  for (let index = 0; index < 30; index += 1) {
+    if (student.modality === "4to Modificado") {
+      if (isFourthModifiedAttendanceDay(rotation, candidate)) {
+        return dateInputValue(candidate);
+      }
+    } else {
+      const weekday = candidate.getDay();
+
+      if (weekday >= 1 && weekday <= 5) {
+        return dateInputValue(candidate);
+      }
+    }
+
+    candidate = addDays(candidate, 1);
+  }
+
+  return dateInputValue(addDays(endDate, 1));
 }
 
 function csvValue(value: string | number | undefined | null) {
@@ -136,7 +174,15 @@ function csvValue(value: string | number | undefined | null) {
   return `"${cleanValue}"`;
 }
 
-function downloadCsv(filename: string, rows: string[][]) {
+function exportSpreadsheet(filename: string, rows: string[][]) {
+  const worksheet = XLSX.utils.aoa_to_sheet(rows);
+  const workbook = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Asistencia");
+  XLSX.writeFile(workbook, filename);
+}
+
+function exportCsv(filename: string, rows: string[][]) {
   const content = rows
     .map((row) => row.map(csvValue).join(","))
     .join("\n");
@@ -152,14 +198,6 @@ function downloadCsv(filename: string, rows: string[][]) {
   URL.revokeObjectURL(url);
 }
 
-function downloadXlsx(filename: string, rows: string[][]) {
-  const worksheet = XLSX.utils.aoa_to_sheet(rows);
-  const workbook = XLSX.utils.book_new();
-
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Marcaciones");
-  XLSX.writeFile(workbook, filename);
-}
-
 export default function AttendancePage() {
   const { user, role } =
     useCurrentUserPermissions();
@@ -167,20 +205,25 @@ export default function AttendancePage() {
     useState<Student[]>([]);
   const [records, setRecords] =
     useState<AttendanceRecord[]>([]);
+  const [selectedDate, setSelectedDate] =
+    useState(() => dateInputValue(new Date()));
   const [selectedStudentId, setSelectedStudentId] =
     useState("");
   const [selectedArea, setSelectedArea] =
     useState("");
-  const [startDate, setStartDate] =
-    useState("");
-  const [endDate, setEndDate] =
-    useState("");
   const [loading, setLoading] =
     useState(true);
-  const [saving, setSaving] =
-    useState<AttendanceType | null>(null);
+  const [savingId, setSavingId] =
+    useState("");
   const [error, setError] =
     useState("");
+
+  const selectedDateObject = useMemo(
+    () => parseLocalDate(selectedDate) || new Date(),
+    [selectedDate]
+  );
+  const canManageAttendance =
+    role === "admin" || role === "teacher";
 
   const loadAttendance = useCallback(async () => {
     try {
@@ -198,7 +241,6 @@ export default function AttendancePage() {
           canUserAccessStudent(role, user?.email, student)
         )
         .sort((a, b) => a.name.localeCompare(b.name, "es"));
-
       const attendanceSnapshot =
         await getDocs(collection(db, "attendance"));
       const visibleStudentIds = new Set(
@@ -210,18 +252,14 @@ export default function AttendancePage() {
           ...(recordDoc.data() as Omit<AttendanceRecord, "id">),
         }))
         .filter((record) => visibleStudentIds.has(record.studentId))
-        .sort((a, b) => {
-          const firstDate = attendanceDate(a)?.getTime() || 0;
-          const secondDate = attendanceDate(b)?.getTime() || 0;
-
-          return secondDate - firstDate;
-        });
+        .filter((record) => record.status === "present" || record.status === "absent")
+        .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
       setStudents(visibleStudents);
       setRecords(visibleRecords);
     } catch (loadError) {
       console.error(loadError);
-      setError("No se pudo cargar la marcación.");
+      setError("No se pudo cargar la asistencia.");
     } finally {
       setLoading(false);
     }
@@ -233,126 +271,167 @@ export default function AttendancePage() {
     });
   }, [loadAttendance]);
 
-  const studentProfile = useMemo(
+  const scheduledStudents = useMemo(
     () =>
-      students.find(
-        (student) =>
-          normalizeEmail(student.email) ===
-          normalizeEmail(user?.email)
-      ),
-    [students, user?.email]
-  );
+      students
+        .map((student) => {
+          const rotation =
+            activeRotationForDate(student, selectedDateObject);
 
-  const recordsWithArea = useMemo<AttendanceRecordWithArea[]>(
-    () =>
-      records.map((record) => {
-        const recordDate = attendanceDate(record);
-        const student = students.find(
-          (currentStudent) =>
-            currentStudent.id === record.studentId
-        );
-
-        return {
-          ...record,
-          resolvedArea:
-            record.area ||
-            studentAreaForDate(student, recordDate),
-        };
-      }),
-    [records, students]
+          return {
+            student,
+            rotation,
+            shouldAttend:
+              rotation && shouldAttend(student, selectedDateObject),
+          };
+        })
+        .filter((item) => item.shouldAttend)
+        .filter(
+          (item) =>
+            (!selectedStudentId ||
+              item.student.id === selectedStudentId) &&
+            (!selectedArea ||
+              item.rotation?.area === selectedArea)
+        ),
+    [selectedArea, selectedDateObject, selectedStudentId, students]
   );
 
   const filteredRecords = useMemo(
     () =>
-      recordsWithArea.filter((record) => {
-        const recordDate = attendanceDate(record);
-        const recordDateValue =
-          recordDate ? dateInputValue(recordDate) : "";
-
-        return (
+      records.filter(
+        (record) =>
           (!selectedStudentId ||
             record.studentId === selectedStudentId) &&
-          (!selectedArea ||
-            record.resolvedArea === selectedArea) &&
-          (!startDate || recordDateValue >= startDate) &&
-          (!endDate || recordDateValue <= endDate)
-        );
-      }),
-    [
-      endDate,
-      recordsWithArea,
-      selectedArea,
-      selectedStudentId,
-      startDate,
-    ]
+          (!selectedArea || record.area === selectedArea)
+      ),
+    [records, selectedArea, selectedStudentId]
   );
 
-  const todayRecords = useMemo(() => {
-    const today = dateInputValue(new Date());
+  const recordsByStudentDateArea = useMemo(
+    () =>
+      records.reduce<Record<string, AttendanceRecord>>((summary, record) => {
+        const key = `${record.studentId}-${record.date}-${record.area}`;
 
-    return recordsWithArea.filter((record) => {
-      const recordDate = attendanceDate(record);
+        summary[key] = record;
 
-      return recordDate && dateInputValue(recordDate) === today;
-    });
-  }, [recordsWithArea]);
+        return summary;
+      }, {}),
+    [records]
+  );
 
-  const latestStudentRecord = useMemo(() => {
-    if (!studentProfile) return null;
+  async function saveAttendance(
+    student: Student,
+    rotation: AreaRotation,
+    status: AttendanceStatus
+  ) {
+    if (!canManageAttendance || !user?.email) return;
 
-    return recordsWithArea.find(
-      (record) => record.studentId === studentProfile.id
-    );
-  }, [recordsWithArea, studentProfile]);
-
-  async function handleMark(type: AttendanceType) {
-    if (!studentProfile || !user?.email) {
-      setError(
-        "No encontramos una ficha de alumno asociada a este correo."
-      );
-      return;
-    }
+    const key = `${student.id}-${selectedDate}-${rotation.area}`;
+    const existingRecord = recordsByStudentDateArea[key];
+    const suggestedRecovery =
+      status === "absent"
+        ? nextRecoveryDate(student, rotation)
+        : "";
+    const payload = {
+      studentId: student.id,
+      studentName: student.name,
+      studentEmail: normalizeEmail(student.email),
+      area: rotation.area,
+      date: selectedDate,
+      status,
+      recoveryStatus:
+        status === "absent" ? "pending" : "none",
+      recoveryDate: suggestedRecovery,
+      modality: student.modality || "Diurno",
+      markedBy: normalizeEmail(user.email),
+      markedAt: serverTimestamp(),
+    };
 
     try {
-      setSaving(type);
-      setError("");
+      setSavingId(key);
 
-      const now = new Date();
-      const activeArea =
-        studentAreaForDate(studentProfile, now);
-
-      const attendanceRef = await addDoc(collection(db, "attendance"), {
-        studentId: studentProfile.id,
-        studentName: studentProfile.name,
-        studentEmail: normalizeEmail(studentProfile.email),
-        area: activeArea,
-        type,
-        markedAt: serverTimestamp(),
-        markedAtIso: now.toISOString(),
-        markedBy: normalizeEmail(user.email),
-      });
+      if (existingRecord) {
+        await updateDoc(
+          doc(db, "attendance", existingRecord.id),
+          payload
+        );
+      } else {
+        await addDoc(collection(db, "attendance"), payload);
+      }
 
       await writeAuditLog({
         action:
-          type === "in"
-            ? "attendance.check_in"
-            : "attendance.check_out",
+          status === "present"
+            ? "attendance.present"
+            : "attendance.absent",
         actorEmail: user.email,
         targetType: "attendance",
-        targetId: attendanceRef.id,
-        targetName: studentProfile.name,
+        targetName: student.name,
         details: {
-          studentId: studentProfile.id,
-          area: activeArea,
+          studentId: student.id,
+          area: rotation.area,
+          date: selectedDate,
+          recoveryDate: suggestedRecovery,
         },
       });
-
       await loadAttendance();
-    } catch (markError) {
-      console.error(markError);
-      setError("No se pudo guardar la marcación.");
+    } catch (saveError) {
+      console.error(saveError);
+      setError("No se pudo guardar la asistencia.");
     } finally {
-      setSaving(null);
+      setSavingId("");
+    }
+  }
+
+  async function updateRecovery(
+    record: AttendanceRecord,
+    recoveryStatus: RecoveryStatus
+  ) {
+    const student = students.find(
+      (currentStudent) => currentStudent.id === record.studentId
+    );
+
+    if (!student || !record.area) return;
+
+    try {
+      setSavingId(record.id);
+
+      if (recoveryStatus === "accepted" && record.recoveryDate) {
+        const nextRotations = (student.rotations || []).map((rotation) =>
+          rotation.area === record.area
+            ? {
+                ...rotation,
+                endDate: record.recoveryDate,
+              }
+            : rotation
+        );
+
+        await updateDoc(doc(db, "students", student.id), {
+          rotations: nextRotations,
+        });
+      }
+
+      await updateDoc(doc(db, "attendance", record.id), {
+        recoveryStatus,
+      });
+      await writeAuditLog({
+        action: `attendance.recovery.${recoveryStatus}`,
+        actorEmail: user?.email,
+        targetType: "attendance",
+        targetId: record.id,
+        targetName: record.studentName,
+        details: {
+          studentId: record.studentId,
+          area: record.area,
+          recoveryDate: record.recoveryDate,
+        },
+      });
+      await loadAttendance();
+    } catch (saveError) {
+      console.error(saveError);
+      setError("No se pudo actualizar la recuperación.");
+    } finally {
+      setSavingId("");
     }
   }
 
@@ -362,64 +441,48 @@ export default function AttendancePage() {
         "Alumno",
         "Correo",
         "Área",
-        "Tipo",
         "Fecha",
-        "Hora",
-        "Marcado por",
+        "Modalidad",
+        "Asistencia",
+        "Recuperación",
+        "Fecha recuperación",
+        "Registrado por",
       ],
-      ...filteredRecords.map((record) => {
-        const recordDate = attendanceDate(record);
-
-        return [
-          record.studentName,
-          record.studentEmail || "",
-          record.resolvedArea || "",
-          typeLabel(record.type),
-          recordDate
-            ? recordDate.toLocaleDateString("es-CL")
-            : "",
-          recordDate
-            ? recordDate.toLocaleTimeString("es-CL", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : "",
-          record.markedBy || "",
-        ];
-      }),
+      ...filteredRecords.map((record) => [
+        record.studentName,
+        record.studentEmail || "",
+        record.area || "",
+        record.date || "",
+        record.modality || "",
+        record.status ? statusLabels[record.status] : "",
+        recoveryLabels[record.recoveryStatus || "none"],
+        record.recoveryDate || "",
+        record.markedBy || "",
+      ]),
     ];
   }
 
-  function exportFilteredRecords() {
-    downloadCsv(
-      `marcaciones-${dateInputValue(new Date())}.csv`,
-      exportRows()
-    );
+  function exportCsvRecords() {
+    exportCsv(`asistencia-${selectedDate}.csv`, exportRows());
   }
 
-  function exportFilteredRecordsXlsx() {
-    downloadXlsx(
-      `marcaciones-${dateInputValue(new Date())}.xlsx`,
-      exportRows()
-    );
+  function exportExcelRecords() {
+    exportSpreadsheet(`asistencia-${selectedDate}.xlsx`, exportRows());
   }
-
-  const canMarkAttendance =
-    role === "student" && Boolean(studentProfile);
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 lg:px-10">
       <header className="mb-8 flex flex-col gap-4 border-b border-slate-200 pb-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">
-            Marcación
+            Asistencia
           </p>
           <h1 className="mt-2 text-4xl font-bold text-slate-900 lg:text-5xl">
-            Ingreso y salida
+            Control docente de asistencia
           </h1>
           <p className="mt-2 max-w-3xl text-base text-slate-500">
-            Registro horario de alumnos con exportación general o filtrada por
-            alumno y rango de fechas.
+            Registra si el alumno asistió, sugiere recuperación ante
+            inasistencia y extiende la rotación cuando el tutor acepta.
           </p>
         </div>
 
@@ -441,259 +504,262 @@ export default function AttendancePage() {
       <section className="mb-6 grid gap-4 md:grid-cols-3">
         <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-semibold text-slate-400">
-            Marcaciones visibles
+            Programados
           </p>
           <p className="mt-2 text-3xl font-bold text-slate-900">
-            {loading ? "-" : records.length}
+            {loading ? "-" : scheduledStudents.length}
           </p>
         </article>
         <article className="rounded-lg border border-emerald-100 bg-emerald-50 p-5">
           <p className="text-sm font-semibold text-emerald-700">
-            Ingresos hoy
+            Asistencias
           </p>
           <p className="mt-2 text-3xl font-bold text-emerald-900">
-            {loading
-              ? "-"
-              : todayRecords.filter((record) => record.type === "in").length}
+            {
+              filteredRecords.filter((record) => record.status === "present")
+                .length
+            }
           </p>
         </article>
         <article className="rounded-lg border border-rose-100 bg-rose-50 p-5">
           <p className="text-sm font-semibold text-rose-700">
-            Salidas hoy
+            Inasistencias
           </p>
           <p className="mt-2 text-3xl font-bold text-rose-900">
-            {loading
-              ? "-"
-              : todayRecords.filter((record) => record.type === "out").length}
+            {
+              filteredRecords.filter((record) => record.status === "absent")
+                .length
+            }
           </p>
         </article>
       </section>
 
-      <section className="mb-6 grid gap-6 lg:grid-cols-[1fr_1.3fr]">
-        <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="grid gap-3 md:grid-cols-4">
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(event) => setSelectedDate(event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          />
+
+          <select
+            value={selectedStudentId}
+            onChange={(event) => setSelectedStudentId(event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="">Todos los alumnos</option>
+            {students.map((student) => (
+              <option key={student.id} value={student.id}>
+                {student.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={selectedArea}
+            onChange={(event) => setSelectedArea(event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="">Todas las áreas</option>
+            {areaOptions.map((area) => (
+              <option key={area} value={area}>
+                {area}
+              </option>
+            ))}
+          </select>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={exportCsvRecords}
+              disabled={filteredRecords.length === 0}
+              className="flex-1 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2.5 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-60"
+            >
+              CSV
+            </button>
+            <button
+              type="button"
+              onClick={exportExcelRecords}
+              disabled={filteredRecords.length === 0}
+              className="flex-1 rounded-lg bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-60"
+            >
+              Excel
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {!canManageAttendance && (
+        <div className="mb-6 rounded-lg border border-amber-100 bg-amber-50 p-5 text-sm leading-6 text-amber-700">
+          La asistencia la registra el docente tutor o administración.
+        </div>
+      )}
+
+      {canManageAttendance && (
+        <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-xl font-bold text-slate-900">
-            Marcar asistencia
+            Pasar asistencia del día
           </h2>
-          <p className="mt-2 text-sm leading-6 text-slate-500">
-            Esta acción queda registrada con fecha, hora y correo del usuario.
-          </p>
 
-          {canMarkAttendance ? (
-            <>
-              <div className="mt-4 rounded-lg bg-slate-50 px-4 py-3">
-                <p className="text-sm font-semibold text-slate-500">
-                  Alumno
-                </p>
-                <p className="mt-1 text-lg font-bold text-slate-900">
-                  {studentProfile?.name}
-                </p>
-                {latestStudentRecord && (
-                  <p className="mt-2 text-sm text-slate-500">
-                    Última marca: {typeLabel(latestStudentRecord.type)} ·{" "}
-                    {attendanceDate(latestStudentRecord)
-                      ? attendanceFormatter.format(
-                          attendanceDate(latestStudentRecord) as Date
-                        )
-                      : "Hora pendiente"}
-                  </p>
-                )}
+          <div className="mt-4 grid gap-3">
+            {loading && (
+              <div className="h-20 animate-pulse rounded-lg bg-slate-100" />
+            )}
+            {!loading && scheduledStudents.length === 0 && (
+              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                No hay alumnos programados para asistir en esta fecha.
               </div>
+            )}
+            {scheduledStudents.map(({ student, rotation }) => {
+              if (!rotation) return null;
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => void handleMark("in")}
-                  disabled={saving !== null}
-                  className="rounded-lg bg-emerald-600 px-5 py-4 font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+              const key = `${student.id}-${selectedDate}-${rotation.area}`;
+              const record = recordsByStudentDateArea[key];
+
+              return (
+                <article
+                  key={key}
+                  className="grid gap-4 rounded-lg border border-slate-100 bg-slate-50 p-4 lg:grid-cols-[1fr_auto] lg:items-center"
                 >
-                  {saving === "in" ? "Guardando..." : "Marcar ingreso"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleMark("out")}
-                  disabled={saving !== null}
-                  className="rounded-lg bg-rose-600 px-5 py-4 font-bold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {saving === "out" ? "Guardando..." : "Marcar salida"}
-                </button>
-              </div>
-            </>
-          ) : (
-            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-500">
-              La marcación directa está disponible para perfiles de alumno con
-              correo asociado a su ficha. Los perfiles docentes y
-              administradores pueden revisar y exportar registros.
-            </div>
-          )}
-        </article>
+                  <div>
+                    <p className="text-lg font-bold text-slate-900">
+                      {student.name}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {rotation.area} · {student.modality || "Diurno"}
+                    </p>
+                    {record && (
+                      <p className="mt-2 text-sm font-semibold text-slate-600">
+                        Registro:{" "}
+                        {record.status ? statusLabels[record.status] : "-"}
+                        {record.recoveryDate
+                          ? ` · Recuperación sugerida ${formatRotationDate(
+                              record.recoveryDate
+                            )}`
+                          : ""}
+                      </p>
+                    )}
+                  </div>
 
-        <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-xl font-bold text-slate-900">
-                Filtros y exportación
-              </h2>
-              <p className="mt-2 text-sm text-slate-500">
-                Exporta la lista completa visible o filtra antes por alumno y
-                fecha o área activa según la fecha de rotación.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={exportFilteredRecords}
-                disabled={filteredRecords.length === 0}
-                className="w-fit rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Exportar CSV
-              </button>
-              <button
-                type="button"
-                onClick={exportFilteredRecordsXlsx}
-                disabled={filteredRecords.length === 0}
-                className="w-fit rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Exportar Excel
-              </button>
-            </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void saveAttendance(student, rotation, "present")
+                      }
+                      disabled={savingId === key}
+                      className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                    >
+                      Asistió
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void saveAttendance(student, rotation, "absent")
+                      }
+                      disabled={savingId === key}
+                      className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-rose-700 disabled:opacity-60"
+                    >
+                      No asistió
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-4">
-            <select
-              value={selectedStudentId}
-              onChange={(event) =>
-                setSelectedStudentId(event.target.value)
-              }
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="">Todos los alumnos</option>
-              {students.map((student) => (
-                <option key={student.id} value={student.id}>
-                  {student.name}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={selectedArea}
-              onChange={(event) =>
-                setSelectedArea(event.target.value)
-              }
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="">Todas las áreas</option>
-              {areaOptions.map((area) => (
-                <option key={area} value={area}>
-                  {area}
-                </option>
-              ))}
-            </select>
-
-            <input
-              type="date"
-              value={startDate}
-              onChange={(event) => setStartDate(event.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-            />
-
-            <input
-              type="date"
-              value={endDate}
-              onChange={(event) => setEndDate(event.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-            />
-          </div>
-        </article>
-      </section>
+        </section>
+      )}
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-xl font-bold text-slate-900">
-            Registros
+            Registro y recuperaciones
           </h2>
           <p className="text-sm font-semibold text-slate-400">
-            {loading
-              ? "Cargando..."
-              : `${filteredRecords.length} registros`}
+            {filteredRecords.length} registros
           </p>
         </div>
 
-        {loading && (
-          <div className="grid gap-3">
-            {Array.from({ length: 4 }, (_, index) => (
-              <div
-                key={index}
-                className="h-16 animate-pulse rounded-lg bg-slate-100"
-              />
-            ))}
-          </div>
-        )}
+        <div className="grid gap-3">
+          {filteredRecords.length === 0 && (
+            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+              No hay registros para los filtros seleccionados.
+            </div>
+          )}
 
-        {!loading && filteredRecords.length === 0 && (
-          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-            No hay marcaciones para los filtros seleccionados.
-          </div>
-        )}
+          {filteredRecords.map((record) => (
+            <article
+              key={record.id}
+              className="grid gap-4 rounded-lg border border-slate-100 bg-slate-50 p-4 lg:grid-cols-[1fr_auto] lg:items-center"
+            >
+              <div>
+                <div className="flex flex-wrap gap-2">
+                  <span
+                    className={`rounded-lg px-3 py-1.5 text-xs font-bold ${
+                      record.status === "present"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-rose-100 text-rose-700"
+                    }`}
+                  >
+                    {record.status ? statusLabels[record.status] : "-"}
+                  </span>
+                  <span className="rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700">
+                    {record.area || "Sin área"}
+                  </span>
+                  <span className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-slate-600">
+                    {formatRotationDate(record.date)}
+                  </span>
+                </div>
 
-        {!loading && filteredRecords.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-400">
-                  <th className="py-3 pr-4">Alumno</th>
-                  <th className="py-3 pr-4">Área</th>
-                  <th className="py-3 pr-4">Tipo</th>
-                  <th className="py-3 pr-4">Fecha y hora</th>
-                  <th className="py-3 pr-4">Correo</th>
-                  <th className="py-3 pr-4">Marcado por</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRecords.map((record) => {
-                  const recordDate = attendanceDate(record);
+                <p className="mt-3 text-lg font-bold text-slate-900">
+                  {record.studentName}
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {record.modality || "Diurno"} · Registrado por{" "}
+                  {record.markedBy || "-"}
+                </p>
+                {record.status === "absent" && (
+                  <p className="mt-2 text-sm font-semibold text-slate-600">
+                    {recoveryLabels[record.recoveryStatus || "pending"]}
+                    {record.recoveryDate
+                      ? ` · ${formatRotationDate(record.recoveryDate)}`
+                      : ""}
+                  </p>
+                )}
+              </div>
 
-                  return (
-                    <tr
-                      key={record.id}
-                      className="border-b border-slate-100 last:border-0"
-                    >
-                      <td className="py-3 pr-4 font-semibold text-slate-900">
-                        {record.studentName}
-                      </td>
-                      <td className="py-3 pr-4">
-                        <span className="rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700">
-                          {record.resolvedArea || "Sin área"}
-                        </span>
-                      </td>
-                      <td className="py-3 pr-4">
-                        <span
-                          className={`rounded-lg px-3 py-1.5 text-xs font-bold ${
-                            record.type === "in"
-                              ? "bg-emerald-50 text-emerald-700"
-                              : "bg-rose-50 text-rose-700"
-                          }`}
-                        >
-                          {typeLabel(record.type)}
-                        </span>
-                      </td>
-                      <td className="py-3 pr-4 text-slate-600">
-                        {recordDate
-                          ? attendanceFormatter.format(recordDate)
-                          : "Hora pendiente"}
-                      </td>
-                      <td className="py-3 pr-4 text-slate-500">
-                        {record.studentEmail || "-"}
-                      </td>
-                      <td className="py-3 pr-4 text-slate-500">
-                        {record.markedBy || "-"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+              {canManageAttendance && record.status === "absent" && (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void updateRecovery(record, "accepted")}
+                    disabled={savingId === record.id}
+                    className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                  >
+                    Aceptar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void updateRecovery(record, "later")}
+                    disabled={savingId === record.id}
+                    className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    Recordar más tarde
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void updateRecovery(record, "rejected")}
+                    disabled={savingId === record.id}
+                    className="rounded-lg border border-rose-100 bg-rose-50 px-4 py-2.5 text-sm font-bold text-rose-700 transition hover:bg-rose-100 disabled:opacity-60"
+                  >
+                    Rechazar
+                  </button>
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
       </section>
     </div>
   );
