@@ -27,6 +27,7 @@ import {
   roleOptions,
   universityOptions,
 } from "../../data/studentOptions";
+import { getAcademicStatus } from "../../lib/academicStatus";
 
 type Student = {
   id: string;
@@ -968,6 +969,7 @@ export default function StudentDetail({
       ["Área", student.area || "General"],
       ["Rol", student.role || "-"],
       ["Modalidad", student.modality || "-"],
+      ["Estado académico", getAcademicStatus(student.average).label],
       ["Tutor", student.tutor || "-"],
       ["Promedio", student.average || "-"],
     ].forEach(([label, value]) => {
@@ -1132,6 +1134,8 @@ export default function StudentDetail({
     );
   }
 
+  const academicStatus = getAcademicStatus(student.average);
+
   return (
 
     <div className="mx-auto w-full max-w-7xl px-6 py-8 lg:px-10">
@@ -1196,6 +1200,7 @@ export default function StudentDetail({
               ["Área", student.area || "General"],
               ["Rol", student.role || "-"],
               ["Modalidad", student.modality || "-"],
+              ["Estado académico", academicStatus.label],
               ["Tutor", student.tutor || "-"],
             ].map(([label, value]) => (
               <div
@@ -1226,16 +1231,23 @@ export default function StudentDetail({
 
         </article>
 
-        <aside className="rounded-lg border border-indigo-100 bg-indigo-50 p-6 shadow-sm">
-          <p className="text-sm font-semibold text-indigo-600">
+        <aside
+          className={`rounded-lg border p-6 shadow-sm ${academicStatus.panelClassName}`}
+        >
+          <p className="text-sm font-semibold">
             Promedio actual
           </p>
 
-          <p className="mt-4 text-5xl font-bold text-indigo-700">
+          <p className="mt-4 text-5xl font-bold">
             {student.average || "-"}
           </p>
 
-          <p className="mt-3 text-sm leading-6 text-indigo-600">
+          <div className="mt-4 flex items-center gap-2 rounded-lg bg-white/70 px-3 py-2 text-sm font-bold">
+            <span className={`h-2.5 w-2.5 rounded-full ${academicStatus.dotColor}`} />
+            {academicStatus.label}
+          </div>
+
+          <p className="mt-3 text-sm leading-6">
             Calculado a partir de las evaluaciones registradas para este alumno.
           </p>
         </aside>

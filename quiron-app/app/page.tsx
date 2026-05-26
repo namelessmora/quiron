@@ -6,6 +6,10 @@ import Link from "next/link";
 import { collection, getDocs, Timestamp } from "firebase/firestore";
 
 import { db } from "./lib/firebase";
+import {
+  getAcademicStatus,
+  parseAverage,
+} from "./lib/academicStatus";
 
 type EvaluationDoc = {
   title?: string;
@@ -64,37 +68,35 @@ function timelineTime(value: Date | null) {
   return value?.getTime() ?? 0;
 }
 
-function parseAverage(value: StudentDoc["average"]) {
-  const numericAverage = Number(String(value ?? "").replace(",", "."));
-
-  return Number.isFinite(numericAverage) ? numericAverage : null;
-}
-
 function emptyGradeStatus(): GradeStatus[] {
+  const approved = getAcademicStatus(5);
+  const critical = getAcademicStatus(4);
+  const failed = getAcademicStatus(3.9);
+
   return [
     {
       key: "approved",
-      label: "Aprobados",
+      label: approved.pluralLabel,
       helper: "Notas 5.0 o superior",
       count: 0,
-      color: "#10b981",
-      textColor: "text-emerald-600",
+      color: approved.color,
+      textColor: approved.textColor,
     },
     {
       key: "critical",
-      label: "Críticos",
+      label: critical.pluralLabel,
       helper: "Notas entre 4.0 y 4.9",
       count: 0,
-      color: "#f59e0b",
-      textColor: "text-amber-600",
+      color: critical.color,
+      textColor: critical.textColor,
     },
     {
       key: "failed",
-      label: "Reprobados",
+      label: failed.pluralLabel,
       helper: "Notas bajo 4.0",
       count: 0,
-      color: "#f43f5e",
-      textColor: "text-rose-600",
+      color: failed.color,
+      textColor: failed.textColor,
     },
   ];
 }

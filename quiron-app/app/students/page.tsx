@@ -6,6 +6,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
 
 import StudentModal from "../components/StudentModal";
+import {
+  areaOptions,
+  careerOptions,
+  modalityOptions,
+  roleOptions,
+  universityOptions,
+} from "../data/studentOptions";
+import {
+  academicStatusOptions,
+  getAcademicStatus,
+} from "../lib/academicStatus";
 import { db } from "../lib/firebase";
 
 type Student = {
@@ -15,6 +26,8 @@ type Student = {
   career?: string;
   area?: string;
   areas?: string[];
+  role?: string;
+  modality?: string;
   tutor?: string;
   average?: string | number;
 };
@@ -22,6 +35,13 @@ type Student = {
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [search, setSearch] = useState("");
+  const [universityFilter, setUniversityFilter] = useState("");
+  const [areaFilter, setAreaFilter] = useState("");
+  const [careerFilter, setCareerFilter] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [modalityFilter, setModalityFilter] = useState("");
+  const [tutorFilter, setTutorFilter] = useState("");
+  const [academicStatusFilter, setAcademicStatusFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showStudentModal, setShowStudentModal] = useState(false);
@@ -68,21 +88,71 @@ export default function StudentsPage() {
   const filteredStudents = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    if (!query) return students;
-
     return students.filter((student) =>
       [
         student.name,
         student.university,
         student.career,
         student.area,
+        student.role,
+        student.modality,
         student.tutor,
+        getAcademicStatus(student.average).label,
         ...(student.areas || []),
       ]
         .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(query))
+        .some((value) => String(value).toLowerCase().includes(query)) &&
+      (!universityFilter || student.university === universityFilter) &&
+      (!areaFilter ||
+        student.area === areaFilter ||
+        student.areas?.includes(areaFilter)) &&
+      (!careerFilter || student.career === careerFilter) &&
+      (!roleFilter || student.role === roleFilter) &&
+      (!modalityFilter || student.modality === modalityFilter) &&
+      (!tutorFilter || student.tutor === tutorFilter) &&
+      (!academicStatusFilter ||
+        getAcademicStatus(student.average).label === academicStatusFilter)
     );
-  }, [search, students]);
+  }, [
+    academicStatusFilter,
+    areaFilter,
+    careerFilter,
+    modalityFilter,
+    roleFilter,
+    search,
+    students,
+    tutorFilter,
+    universityFilter,
+  ]);
+
+  const tutorOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(students.map((student) => student.tutor).filter(Boolean))
+      ).sort((a, b) => String(a).localeCompare(String(b), "es")),
+    [students]
+  );
+
+  const activeFilters = [
+    universityFilter,
+    areaFilter,
+    careerFilter,
+    roleFilter,
+    modalityFilter,
+    tutorFilter,
+    academicStatusFilter,
+  ].filter(Boolean).length;
+
+  function clearFilters() {
+    setSearch("");
+    setUniversityFilter("");
+    setAreaFilter("");
+    setCareerFilter("");
+    setRoleFilter("");
+    setModalityFilter("");
+    setTutorFilter("");
+    setAcademicStatusFilter("");
+  }
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 lg:px-10">
@@ -127,6 +197,120 @@ export default function StudentsPage() {
         </p>
       </div>
 
+      <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Filtros</h2>
+            <p className="text-sm text-slate-500">
+              Cruza datos académicos y administrativos para encontrar alumnos.
+            </p>
+          </div>
+
+          {(activeFilters > 0 || search) && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="w-fit rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+            >
+              Limpiar filtros
+            </button>
+          )}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <select
+            value={universityFilter}
+            onChange={(event) => setUniversityFilter(event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="">Universidad</option>
+            {universityOptions.map((university) => (
+              <option key={university} value={university}>
+                {university}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={areaFilter}
+            onChange={(event) => setAreaFilter(event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="">Área</option>
+            {areaOptions.map((area) => (
+              <option key={area} value={area}>
+                {area}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={careerFilter}
+            onChange={(event) => setCareerFilter(event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="">Carrera</option>
+            {careerOptions.map((career) => (
+              <option key={career} value={career}>
+                {career}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={academicStatusFilter}
+            onChange={(event) => setAcademicStatusFilter(event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="">Estado académico</option>
+            {academicStatusOptions.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={roleFilter}
+            onChange={(event) => setRoleFilter(event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="">Rol</option>
+            {roleOptions.map((role) => (
+              <option key={role} value={role}>
+                {role}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={modalityFilter}
+            onChange={(event) => setModalityFilter(event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="">Modalidad</option>
+            {modalityOptions.map((modality) => (
+              <option key={modality} value={modality}>
+                {modality}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={tutorFilter}
+            onChange={(event) => setTutorFilter(event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="">Tutor</option>
+            {tutorOptions.map((tutor) => (
+              <option key={tutor} value={tutor}>
+                {tutor}
+              </option>
+            ))}
+          </select>
+        </div>
+      </section>
+
       {error && (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -154,56 +338,83 @@ export default function StudentsPage() {
         )}
 
         {!loading &&
-          filteredStudents.map((student) => (
-            <article
-              key={student.id}
-              className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition hover:border-indigo-200"
-            >
-              <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
-                <div>
-                  <Link
-                    href={`/students/${student.id}`}
-                    className="text-xl font-bold text-slate-900 transition hover:text-indigo-600"
-                  >
-                    {student.name}
-                  </Link>
+          filteredStudents.map((student) => {
+            const academicStatus = getAcademicStatus(student.average);
 
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <span className="rounded-lg bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700">
-                      {student.university || "Sin universidad"}
-                    </span>
-                    <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700">
-                      {student.area || student.areas?.[0] || "General"}
-                    </span>
-                    {student.tutor && (
-                      <span className="rounded-lg bg-emerald-50 px-3 py-1.5 text-sm text-emerald-700">
-                        Tutor: {student.tutor}
+            return (
+              <article
+                key={student.id}
+                className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition hover:border-indigo-200"
+              >
+                <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Link
+                        href={`/students/${student.id}`}
+                        className="text-xl font-bold text-slate-900 transition hover:text-indigo-600"
+                      >
+                        {student.name}
+                      </Link>
+
+                      <span
+                        className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${academicStatus.badgeClassName}`}
+                      >
+                        {academicStatus.label}
                       </span>
-                    )}
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="rounded-lg bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700">
+                        {student.university || "Sin universidad"}
+                      </span>
+                      <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700">
+                        {student.area || student.areas?.[0] || "General"}
+                      </span>
+                      {student.career && (
+                        <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700">
+                          {student.career}
+                        </span>
+                      )}
+                      {student.role && (
+                        <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700">
+                          {student.role}
+                        </span>
+                      )}
+                      {student.modality && (
+                        <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700">
+                          {student.modality}
+                        </span>
+                      )}
+                      {student.tutor && (
+                        <span className="rounded-lg bg-emerald-50 px-3 py-1.5 text-sm text-emerald-700">
+                          Tutor: {student.tutor}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4 lg:justify-end">
+                    <div className="text-left lg:text-right">
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                        Promedio
+                      </p>
+                      <p className={`mt-1 text-3xl font-bold ${academicStatus.textColor}`}>
+                        {student.average || "-"}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteStudent(student.id)}
+                      className="rounded-lg border border-red-100 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100"
+                    >
+                      Eliminar
+                    </button>
                   </div>
                 </div>
-
-                <div className="flex items-center justify-between gap-4 lg:justify-end">
-                  <div className="text-left lg:text-right">
-                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                      Promedio
-                    </p>
-                    <p className="mt-1 text-3xl font-bold text-indigo-600">
-                      {student.average || "-"}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteStudent(student.id)}
-                    className="rounded-lg border border-red-100 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100"
-                  >
-                    Eliminar
-                  </button>
-                </div>
-              </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
       </div>
 
       {showStudentModal && (
