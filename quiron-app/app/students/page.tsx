@@ -22,6 +22,12 @@ import {
   getAcademicStatus,
 } from "../lib/academicStatus";
 import { db } from "../lib/firebase";
+import {
+  AreaRotation,
+  formatRotationDate,
+  isStudentFinalized,
+  validStudentAreas,
+} from "../lib/rotations";
 
 type Student = {
   id: string;
@@ -34,25 +40,13 @@ type Student = {
   modality?: string;
   tutor?: string;
   average?: string | number;
+  rotations?: AreaRotation[];
 };
 
 type EvaluationSummary = {
   rubricId?: string;
   rubricName?: string;
 };
-
-function studentAreas(student: Student) {
-  const areas = [
-    ...(student.areas || []),
-    student.area,
-  ].filter(
-    (area): area is string =>
-      typeof area === "string" &&
-      areaOptions.includes(area)
-  );
-
-  return Array.from(new Set(areas));
-}
 
 function normalizeMatchValue(value?: string) {
   return (value || "")
@@ -100,6 +94,7 @@ export default function StudentsPage() {
   const [modalityFilter, setModalityFilter] = useState("");
   const [tutorFilter, setTutorFilter] = useState("");
   const [academicStatusFilter, setAcademicStatusFilter] = useState("");
+  const [studentTab, setStudentTab] = useState<"active" | "finished">("active");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showStudentModal, setShowStudentModal] = useState(false);
@@ -171,11 +166,14 @@ export default function StudentsPage() {
     const query = search.trim().toLowerCase();
 
     return students.filter((student) =>
+      (studentTab === "finished"
+        ? isStudentFinalized(student)
+        : !isStudentFinalized(student)) &&
       [
         student.name,
         student.university,
         student.career,
-        studentAreas(student).join(" "),
+        validStudentAreas(student).join(" "),
         student.role,
         student.modality,
         student.tutor,
@@ -185,7 +183,7 @@ export default function StudentsPage() {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query)) &&
       (!universityFilter || student.university === universityFilter) &&
-      (!areaFilter || studentAreas(student).includes(areaFilter)) &&
+      (!areaFilter || validStudentAreas(student).includes(areaFilter)) &&
       (!areaEvaluationFilter ||
         !areaFilter ||
         (areaEvaluationFilter === "with"
@@ -212,9 +210,22 @@ export default function StudentsPage() {
     roleFilter,
     search,
     students,
+    studentTab,
     tutorFilter,
     universityFilter,
   ]);
+
+  const activeStudentsCount = useMemo(
+    () =>
+      students.filter((student) => !isStudentFinalized(student)).length,
+    [students]
+  );
+
+  const finishedStudentsCount = useMemo(
+    () =>
+      students.filter((student) => isStudentFinalized(student)).length,
+    [students]
+  );
 
   const tutorOptions = useMemo(
     () =>
@@ -288,6 +299,36 @@ export default function StudentsPage() {
             ? "Cargando..."
             : `${filteredStudents.length} de ${students.length} alumnos`}
         </p>
+      </div>
+
+      <div className="mb-6 flex flex-wrap gap-2">
+        {[
+          {
+            key: "active",
+            label: "Rotando",
+            count: activeStudentsCount,
+          },
+          {
+            key: "finished",
+            label: "Finalizados",
+            count: finishedStudentsCount,
+          },
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() =>
+              setStudentTab(tab.key as "active" | "finished")
+            }
+            className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
+              studentTab === tab.key
+                ? "bg-indigo-600 text-white"
+                : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            {tab.label} ({tab.count})
+          </button>
+        ))}
       </div>
 
       <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -477,8 +518,13 @@ export default function StudentsPage() {
                         {student.university || "Sin universidad"}
                       </span>
                       <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700">
-                        {studentAreas(student).join(", ") || "Sin área"}
+                        {validStudentAreas(student).join(", ") || "Sin área"}
                       </span>
+                      {student.rotations?.[0]?.endDate && (
+                        <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700">
+                          Fin: {formatRotationDate(student.rotations[0].endDate)}
+                        </span>
+                      )}
                       {student.career && (
                         <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700">
                           {student.career}

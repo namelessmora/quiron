@@ -7,13 +7,16 @@ import * as XLSX from "xlsx";
 import {
   addDoc,
   collection,
+  doc,
   getDocs,
+  updateDoc,
 } from "firebase/firestore";
 
 import { db } from "../lib/firebase";
 import { areaOptions } from "../data/studentOptions";
+import { AreaRotation } from "../lib/rotations";
 
-type ImportRow = Record<string, string | number | undefined>;
+type ImportRow = Record<string, string | number | Date | undefined>;
 
 type ImportedStudent = {
   name: string;
@@ -23,9 +26,16 @@ type ImportedStudent = {
   shift: string;
   status: string;
   areas: string[];
+  rotations: AreaRotation[];
 };
 
-function textValue(value: string | number | undefined) {
+type ExistingStudent = {
+  id: string;
+  areas?: string[];
+  rotations?: AreaRotation[];
+};
+
+function textValue(value: string | number | Date | undefined) {
   return value === undefined ? "" : String(value);
 }
 
@@ -44,6 +54,87 @@ function validArea(value: string) {
         .toLowerCase()
         .trim() === normalizedValue
   );
+}
+
+function normalizedKey(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function rowValue(row: ImportRow, aliases: string[]) {
+  const normalizedAliases = aliases.map(normalizedKey);
+  const entry = Object.entries(row).find(([key]) =>
+    normalizedAliases.includes(normalizedKey(key))
+  );
+
+  return entry?.[1];
+}
+
+function toIsoDate(value: string | number | Date | undefined) {
+  if (!value) return "";
+
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  if (typeof value === "number") {
+    const parsed = XLSX.SSF.parse_date_code(value);
+
+    if (!parsed) return "";
+
+    return `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(
+      parsed.d
+    ).padStart(2, "0")}`;
+  }
+
+  const cleanValue = value.trim();
+  const dayFirstMatch = cleanValue.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+
+  if (dayFirstMatch) {
+    const [, day, month, year] = dayFirstMatch;
+    const fullYear = year.length === 2 ? `20${year}` : year;
+
+    return `${fullYear}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+
+  const isoMatch = cleanValue.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+
+  return "";
+}
+
+function mergeUnique<T>(current: T[], next: T[]) {
+  return Array.from(new Set([...current, ...next]));
+}
+
+function mergeRotations(
+  current: AreaRotation[] = [],
+  next: AreaRotation[] = []
+) {
+  const rotationMap = new Map<string, AreaRotation>();
+
+  [...current, ...next].forEach((rotation) => {
+    if (!rotation.area) return;
+
+    const key = rotation.area;
+    const previous = rotationMap.get(key);
+
+    rotationMap.set(key, {
+      area: rotation.area,
+      startDate: rotation.startDate || previous?.startDate || "",
+      endDate: rotation.endDate || previous?.endDate || "",
+    });
+  });
+
+  return Array.from(rotationMap.values());
 }
 
 export default function ImportPage() {
@@ -101,7 +192,7 @@ export default function ImportPage() {
         );
 
       const existingStudents:
-        Record<string, boolean> = {};
+        Record<string, ExistingStudent> = {};
 
       existingSnapshot.forEach((doc) => {
 
@@ -113,7 +204,15 @@ export default function ImportPage() {
             : "";
 
         if (name) {
-          existingStudents[name] = true;
+          existingStudents[name] = {
+            id: doc.id,
+            areas: Array.isArray(data.areas)
+              ? (data.areas as string[])
+              : [],
+            rotations: Array.isArray(data.rotations)
+              ? (data.rotations as AreaRotation[])
+              : [],
+          };
         }
 
       });
@@ -126,8 +225,7 @@ export default function ImportPage() {
         console.log(row);
 
         const name = textValue(
-          row.Nombre ||
-            row.nombre
+          rowValue(row, ["Nombre", "Alumno", "Estudiante"])
         );
 
         if (!name) continue;
@@ -136,8 +234,35 @@ export default function ImportPage() {
           name.trim();
 
         const area = validArea(
-          textValue(row.Area || row.area)
+          textValue(rowValue(row, ["Área", "Area"]))
         );
+        const startDate = toIsoDate(
+          rowValue(row, [
+            "Fecha inicio",
+            "Fecha de inicio",
+            "Inicio",
+            "Inicio internado",
+            "Fecha inicio internado",
+          ])
+        );
+        const endDate = toIsoDate(
+          rowValue(row, [
+            "Fecha fin",
+            "Fecha de fin",
+            "Fin",
+            "Término",
+            "Termino",
+            "Fin internado",
+            "Fecha fin internado",
+          ])
+        );
+        const rotation = area
+          ? {
+              area,
+              startDate,
+              endDate,
+            }
+          : null;
 
         if (!studentsMap[cleanName]) {
 
@@ -146,24 +271,25 @@ export default function ImportPage() {
             name: cleanName,
 
             university:
-              textValue(row.Universidad || row.universidad) ||
+              textValue(rowValue(row, ["Universidad"])) ||
               "Sin universidad",
 
             career:
-              textValue(row.Carrera || row.carrera) ||
+              textValue(rowValue(row, ["Carrera"])) ||
               "Sin definir",
 
             tutor:
-              textValue(row.Docente || row.docente) ||
+              textValue(rowValue(row, ["Docente", "Tutor"])) ||
               "",
 
             shift:
-              textValue(row.Jornada || row.jornada) ||
+              textValue(rowValue(row, ["Jornada", "Modalidad"])) ||
               "",
 
             status: "Activo",
 
             areas: area ? [area] : [],
+            rotations: rotation ? [rotation] : [],
 
           };
 
@@ -182,22 +308,53 @@ export default function ImportPage() {
 
           }
 
+          if (rotation) {
+            studentsMap[
+              cleanName
+            ].rotations = mergeRotations(
+              studentsMap[cleanName].rotations,
+              [rotation]
+            );
+          }
+
         }
 
       }
 
       let importedCount = 0;
+      let updatedCount = 0;
 
       for (const studentName in studentsMap) {
 
         const student =
           studentsMap[studentName];
 
-        if (
+        const existingStudent =
           existingStudents[
             student.name.toLowerCase()
-          ]
-        ) {
+          ];
+
+        if (existingStudent) {
+          await updateDoc(
+            doc(db, "students", existingStudent.id),
+            {
+              areas: mergeUnique(
+                existingStudent.areas || [],
+                student.areas
+              ),
+              area:
+                mergeUnique(
+                  existingStudent.areas || [],
+                  student.areas
+                )[0] || "",
+              rotations: mergeRotations(
+                existingStudent.rotations || [],
+                student.rotations
+              ),
+            }
+          );
+
+          updatedCount++;
           continue;
         }
 
@@ -211,7 +368,7 @@ export default function ImportPage() {
       }
 
       setMessage(
-        `${importedCount} alumnos importados 😭`
+        `${importedCount} alumnos importados y ${updatedCount} actualizados`
       );
 
       setLoading(false);

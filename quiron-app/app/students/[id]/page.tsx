@@ -28,6 +28,12 @@ import {
   universityOptions,
 } from "../../data/studentOptions";
 import { getAcademicStatus } from "../../lib/academicStatus";
+import {
+  AreaRotation,
+  formatRotationDate,
+  validStudentAreas,
+  validRotations,
+} from "../../lib/rotations";
 
 type Student = {
   id: string;
@@ -41,6 +47,7 @@ type Student = {
   tutor?: string;
   average?: string;
   observations?: string;
+  rotations?: AreaRotation[];
 };
 
 type Evaluation = {
@@ -154,16 +161,7 @@ function universityCandidates(
 function studentAreas(
   student: Student
 ) {
-  const areas = [
-    ...(student.areas || []),
-    student.area,
-  ].filter(
-    (area): area is string =>
-      typeof area === "string" &&
-      areaOptions.includes(area)
-  );
-
-  return Array.from(new Set(areas));
+  return validStudentAreas(student);
 }
 
 function findSuggestedRubric(
@@ -617,11 +615,13 @@ export default function StudentDetail({
         )
       : "";
 
-  function openNewEvaluationModal() {
+  function openNewEvaluationModal(rubricId?: string) {
 
     if (student) {
       const suggestedRubric =
-        findSuggestedRubric(student);
+        rubricId
+          ? rubrics.find((rubric) => rubric.id === rubricId)
+          : findSuggestedRubric(student);
 
       setSelectedRubricId(
         suggestedRubric?.id || ""
@@ -1424,6 +1424,38 @@ export default function StudentDetail({
           </p>
         </aside>
 
+        {validRotations(student).length > 0 && (
+          <article className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2">
+            <h2 className="text-xl font-bold text-slate-900">
+              Fechas de internado
+            </h2>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {validRotations(student).map((rotation, index) => (
+                <div
+                  key={`${rotation.area}-${index}`}
+                  className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-4"
+                >
+                  <p className="text-sm font-bold text-slate-900">
+                    {rotation.area}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-500">
+                    Inicio:{" "}
+                    <span className="font-semibold text-slate-700">
+                      {formatRotationDate(rotation.startDate)}
+                    </span>
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Fin:{" "}
+                    <span className="font-semibold text-slate-700">
+                      {formatRotationDate(rotation.endDate)}
+                    </span>
+                  </p>
+                </div>
+              ))}
+            </div>
+          </article>
+        )}
+
       </section>
 
       <section className="mb-8 grid gap-6 xl:grid-cols-[1.4fr_1fr]">
@@ -1464,12 +1496,19 @@ export default function StudentDetail({
                   ) : (
                     <div className="mt-3 flex flex-wrap gap-2">
                       {group.rubrics.map((rubric) => (
-                        <span
+                        <button
                           key={rubric.id}
-                          className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
+                          type="button"
+                          onClick={() =>
+                            openNewEvaluationModal(rubric.id)
+                          }
+                          className="rounded-lg bg-white px-3 py-2 text-left text-sm font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-indigo-50 hover:text-indigo-700 hover:ring-indigo-200"
                         >
                           {rubric.name}
-                        </span>
+                          <span className="ml-2 text-xs font-bold text-indigo-600">
+                            Evaluar
+                          </span>
+                        </button>
                       ))}
                     </div>
                   )}
