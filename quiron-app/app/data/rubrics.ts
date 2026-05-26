@@ -24,7 +24,7 @@ export type Rubric = {
   criteria: RubricCriterion[];
 };
 
-const uboRxOptions: RubricOption[] = [
+const uboPerformanceOptions: RubricOption[] = [
   {
     label: "Destacado",
     score: 10,
@@ -58,9 +58,32 @@ function criteria(
       .replace(/^-|-$/g, "")}-${index + 1}`,
     dimension,
     title,
-    options: uboRxOptions,
+    options: uboPerformanceOptions,
   }));
 }
+
+const uboAttitudinalCriteria = [
+  "Llega con puntualidad a la práctica.",
+  "Asiste con uniforme según reglamento de Escuela al lugar de práctica.",
+  "Tiene un trato respetuoso con las personas con que se relaciona.",
+  "Cumple con las tareas asignadas.",
+  "Tiene capacidad para organizar su trabajo o las responsabilidades asignadas.",
+  "Participa en forma activa en los equipos de trabajo relacionados con la atención de pacientes.",
+  "Demuestra capacidad de manejo de grupo.",
+  "Demuestra actitud de servicio en la práctica realizada.",
+  "Demuestra una actitud reflexiva respecto a los acontecimientos y experiencias de la práctica.",
+  "Manifiesta una actitud de autoaprendizaje respecto a los desafíos que le presenta la práctica.",
+  "Respeta las normas del Centro durante la práctica, como horarios, métodos y protocolos.",
+];
+
+const uboAnalysisCriteria = [
+  "Interpreta correctamente el resultado del examen.",
+  "Argumenta verbalmente la interpretación del examen realizado.",
+  "Apoya técnicamente con las dudas que pueda tener el médico radiólogo.",
+  "Maneja con discreción los resultados del examen.",
+  "Entiende la patología y puede sugerir exámenes complementarios.",
+  "Identifica correctamente estructuras anatómicas.",
+];
 
 export const rubrics: Rubric[] = [
   {
@@ -82,19 +105,7 @@ export const rubrics: Rubric[] = [
     passingScore: 7,
     criticalCriteria: [],
     criteria: [
-      ...criteria("Aspectos actitudinales", [
-        "Llega con puntualidad a la práctica.",
-        "Asiste con uniforme según reglamento de Escuela al lugar de práctica.",
-        "Tiene un trato respetuoso con las personas con que se relaciona.",
-        "Cumple con las tareas asignadas.",
-        "Tiene capacidad para organizar su trabajo o las responsabilidades asignadas.",
-        "Participa en forma activa en los equipos de trabajo relacionados con la atención de pacientes.",
-        "Demuestra capacidad de manejo de grupo.",
-        "Demuestra actitud de servicio en la práctica realizada.",
-        "Demuestra una actitud reflexiva respecto a los acontecimientos y experiencias de la práctica.",
-        "Manifiesta una actitud de autoaprendizaje respecto a los desafíos que le presenta la práctica.",
-        "Respeta las normas del Centro durante la práctica, como horarios, métodos y protocolos.",
-      ]),
+      ...criteria("Aspectos actitudinales", uboAttitudinalCriteria),
       ...criteria("Procedimiento con el usuario", [
         "Recibe en forma cordial al usuario.",
         "Consulta la razón del examen y solicita la documentación necesaria.",
@@ -130,14 +141,66 @@ export const rubrics: Rubric[] = [
         "Responde correctamente preguntas del usuario cuando corresponden a su nivel de competencia.",
         "Se despide cordialmente del usuario.",
       ]),
-      ...criteria("Análisis del examen", [
-        "Interpreta correctamente el resultado del examen.",
-        "Argumenta verbalmente la interpretación del examen realizado.",
-        "Apoya técnicamente con las dudas que pueda tener el médico radiólogo.",
-        "Maneja con discreción los resultados del examen.",
-        "Entiende la patología y puede sugerir exámenes complementarios.",
-        "Identifica correctamente estructuras anatómicas.",
+      ...criteria("Análisis del examen", uboAnalysisCriteria),
+    ],
+  },
+  {
+    id: "ubo-tc",
+    university: "UBO",
+    area: "TC",
+    areaAliases: [
+      "TC",
+      "TAC",
+      "Scanner",
+      "Escáner",
+      "Tomografía",
+      "Tomografia",
+      "Tomografía Computarizada",
+      "Tomografia Computarizada",
+    ],
+    name: "Pauta TC UBO",
+    scale: 70,
+    maxScore: 10,
+    passingScore: 7,
+    criticalCriteria: [],
+    criteria: [
+      ...criteria("Aspectos actitudinales", uboAttitudinalCriteria),
+      ...criteria("Procedimiento con el usuario", [
+        "Recibe en forma cordial al usuario.",
+        "Consulta la razón del examen y solicita la documentación necesaria, como consentimiento informado y antecedentes de reacciones adversas al contraste yodado.",
+        "Explica al usuario el procedimiento a seguir en la exploración por scanner.",
+        "Pregunta al usuario si tiene restricciones para realizar el examen, como embarazo u otras.",
+        "Solicita al usuario utilizar vestimenta especial para el examen.",
+        "Respeta la dignidad del paciente, su privacidad, pudor e información.",
+        "Realiza correctamente el posicionamiento en la camilla según examen solicitado.",
       ]),
+      ...criteria("Uso del equipo radiológico", [
+        "Ajusta correctamente los parámetros de exploración, como mA, kV y pitch.",
+        "Ubica en forma correcta el cabezal en la mesa de exploración.",
+        "Selecciona correctamente el protocolo a utilizar para el examen.",
+        "Obtiene las imágenes por TC correctas solicitadas y sabe corregir errores.",
+        "Realiza una correcta selección de imágenes al enviarlas al PACS.",
+        "Selecciona correctamente ventana y kernel respecto a la patología.",
+        "Logra el grado de densidades y nitidez requerida para el examen y sabe corregir si no lo obtiene.",
+        "Logra una resolución espacial suficiente para analizar el examen.",
+      ]),
+      ...criteria("Bioseguridad", [
+        "Se asegura de mantener los elementos de bioseguridad en la sala del scanner.",
+        "Permanece en el bunker del scanner cumpliendo sus tareas.",
+        "Utiliza su dosímetro desde el inicio hasta el final de su jornada.",
+        "Mantiene la puerta cerrada de la sala de scanner.",
+        "Solicita al personal no estar presente durante la exploración por exposición a radiación ionizante.",
+        "No expone al usuario a exploraciones continuas en tomografía computarizada por errores técnicos u otros.",
+        "Brinda medidas de protección radiológica al usuario o usuaria.",
+        "Brinda medidas de protección radiológica y consulta antecedentes al acompañante si debe permanecer en la sala del tomógrafo.",
+      ]),
+      ...criteria("Aspectos finales del procedimiento", [
+        "Solicita al usuario que, al concluir el examen, puede levantarse de la mesa y/o vestirse.",
+        "Informa al usuario sobre la fecha de los resultados del examen.",
+        "Responde correctamente preguntas del usuario cuando corresponden a su nivel de competencia.",
+        "Se despide cordialmente del usuario.",
+      ]),
+      ...criteria("Análisis del examen", uboAnalysisCriteria),
     ],
   },
 ];
