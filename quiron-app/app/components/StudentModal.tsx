@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { addDoc, collection } from "firebase/firestore";
 
+import {
+  areaOptions,
+  universityOptions,
+} from "../data/studentOptions";
 import { db } from "../lib/firebase";
 
 type Props = {
@@ -18,7 +22,7 @@ export default function StudentModal({ onClose, onSaved }: Props) {
     name: "",
     university: "",
     career: "",
-    areas: "",
+    area: "",
     tutor: "",
   });
 
@@ -26,8 +30,8 @@ export default function StudentModal({ onClose, onSaved }: Props) {
     const cleanName = form.name.trim();
     const cleanUniversity = form.university.trim();
 
-    if (!cleanName || !cleanUniversity) {
-      setError("Nombre y universidad son obligatorios.");
+    if (!cleanName || !cleanUniversity || !form.area) {
+      setError("Nombre, universidad y área son obligatorios.");
       return;
     }
 
@@ -35,17 +39,12 @@ export default function StudentModal({ onClose, onSaved }: Props) {
       setLoading(true);
       setError("");
 
-      const areas = form.areas
-        .split(",")
-        .map((area) => area.trim())
-        .filter(Boolean);
-
       await addDoc(collection(db, "students"), {
         name: cleanName,
         university: cleanUniversity,
         career: form.career.trim(),
-        areas,
-        area: areas[0] || "General",
+        areas: [form.area],
+        area: form.area,
         tutor: form.tutor.trim(),
         status: "Activo",
       });
@@ -100,9 +99,7 @@ export default function StudentModal({ onClose, onSaved }: Props) {
             className="w-full rounded-lg border border-slate-200 px-4 py-3 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
           />
 
-          <input
-            type="text"
-            placeholder="Universidad"
+          <select
             value={form.university}
             onChange={(event) =>
               setForm({
@@ -111,7 +108,20 @@ export default function StudentModal({ onClose, onSaved }: Props) {
               })
             }
             className="w-full rounded-lg border border-slate-200 px-4 py-3 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-          />
+          >
+            <option value="">
+              Universidad
+            </option>
+
+            {universityOptions.map((university) => (
+              <option
+                key={university}
+                value={university}
+              >
+                {university}
+              </option>
+            ))}
+          </select>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <input
@@ -141,18 +151,29 @@ export default function StudentModal({ onClose, onSaved }: Props) {
             />
           </div>
 
-          <input
-            type="text"
-            placeholder="Áreas separadas por coma"
-            value={form.areas}
+          <select
+            value={form.area}
             onChange={(event) =>
               setForm({
                 ...form,
-                areas: event.target.value,
+                area: event.target.value,
               })
             }
             className="w-full rounded-lg border border-slate-200 px-4 py-3 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-          />
+          >
+            <option value="">
+              Área
+            </option>
+
+            {areaOptions.map((area) => (
+              <option
+                key={area}
+                value={area}
+              >
+                {area}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="mt-6 flex justify-end gap-3">

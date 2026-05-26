@@ -20,6 +20,10 @@ import {
   Rubric,
   rubrics,
 } from "../../data/rubrics";
+import {
+  areaOptions,
+  universityOptions,
+} from "../../data/studentOptions";
 
 type Student = {
   id: string;
@@ -27,6 +31,7 @@ type Student = {
   university: string;
   career?: string;
   area?: string;
+  areas?: string[];
   tutor?: string;
   average?: string;
   observations?: string;
@@ -121,15 +126,35 @@ function matchesValue(
   });
 }
 
+function universityCandidates(
+  rubric: Rubric
+) {
+
+  const candidates = [
+    rubric.university,
+    ...(rubric.universityAliases || []),
+  ];
+
+  if (
+    matchesValue(rubric.university, ["STO"]) ||
+    matchesValue(rubric.university, ["UST"])
+  ) {
+    candidates.push("STO", "UST");
+  }
+
+  return candidates;
+}
+
 function findSuggestedRubric(
   student: Student
 ) {
 
   return rubrics.find((rubric) => {
     const universityMatches =
-      matchesValue(student.university, [
-        rubric.university,
-      ]);
+      matchesValue(
+        student.university,
+        universityCandidates(rubric)
+      );
 
     const areaMatches =
       normalizeMatchValue(rubric.area) ===
@@ -782,16 +807,17 @@ export default function StudentDetail({
 
     try {
 
-      await updateDoc(
-        doc(db, "students", student.id),
-        {
-          name: editName,
-          university: editUniversity,
-          career: editCareer,
-          area: editArea,
-          tutor: editTutor,
-          observations:
- editObservations,
+	      await updateDoc(
+	        doc(db, "students", student.id),
+	        {
+	          name: editName,
+	          university: editUniversity,
+	          career: editCareer,
+	          area: editArea,
+            areas: editArea ? [editArea] : [],
+	          tutor: editTutor,
+	          observations:
+	 editObservations,
         }
       );
 
@@ -799,9 +825,10 @@ export default function StudentDetail({
         ...student,
         name: editName,
         university: editUniversity,
-        career: editCareer,
-        area: editArea,
-        tutor: editTutor,
+	        career: editCareer,
+	        area: editArea,
+          areas: editArea ? [editArea] : [],
+	        tutor: editTutor,
         observations:
            editObservations,
       });
@@ -1691,8 +1718,7 @@ export default function StudentDetail({
                 className="border border-gray-200 rounded-2xl px-5 py-4"
               />
 
-              <input
-                placeholder="Universidad"
+              <select
                 value={editUniversity}
                 onChange={(e) =>
                   setEditUniversity(
@@ -1700,7 +1726,22 @@ export default function StudentDetail({
                   )
                 }
                 className="border border-gray-200 rounded-2xl px-5 py-4"
-              />
+              >
+                <option value="">
+                  Universidad
+                </option>
+
+                {universityOptions.map(
+                  (university) => (
+                    <option
+                      key={university}
+                      value={university}
+                    >
+                      {university}
+                    </option>
+                  )
+                )}
+              </select>
 
               <input
                 placeholder="Carrera"
@@ -1713,8 +1754,7 @@ export default function StudentDetail({
                 className="border border-gray-200 rounded-2xl px-5 py-4"
               />
 
-              <input
-                placeholder="Área"
+              <select
                 value={editArea}
                 onChange={(e) =>
                   setEditArea(
@@ -1722,7 +1762,20 @@ export default function StudentDetail({
                   )
                 }
                 className="border border-gray-200 rounded-2xl px-5 py-4"
-              />
+              >
+                <option value="">
+                  Área
+                </option>
+
+                {areaOptions.map((area) => (
+                  <option
+                    key={area}
+                    value={area}
+                  >
+                    {area}
+                  </option>
+                ))}
+              </select>
 
               <input
                 placeholder="Tutor"
