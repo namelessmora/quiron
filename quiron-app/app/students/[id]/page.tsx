@@ -240,20 +240,34 @@ function evaluationUsesRubric(
   );
 }
 
+function isExcludedRubricResponse(
+  response: RubricResponse | undefined,
+  rubric: Rubric
+) {
+  if (!response) return false;
+
+  const excludedLabels = [
+    "No aplica",
+    ...(rubric.excludeFromGradeLabels || []),
+  ].map(normalizeMatchValue);
+
+  return excludedLabels.includes(
+    normalizeMatchValue(response.label)
+  );
+}
+
 function calculateRubricGrade(
   rubric: Rubric,
   responses: Record<string, RubricResponse>
 ) {
 
-  const excludedLabels =
-    rubric.excludeFromGradeLabels || [];
-
   const answeredCriteria =
     rubric.criteria.filter(
       (criterion) =>
         responses[criterion.id] &&
-        !excludedLabels.includes(
-          responses[criterion.id].label
+        !isExcludedRubricResponse(
+          responses[criterion.id],
+          rubric
         )
     );
 
