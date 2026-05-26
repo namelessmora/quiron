@@ -59,6 +59,12 @@ export default function Sidebar() {
     },
 
     {
+      label: "Marcación",
+      href: "/attendance",
+      visible: true,
+    },
+
+    {
       label: "Alumnos finalizados",
       href: "/students?view=finished",
       visible: permissions.canViewAllStudents,
