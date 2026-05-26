@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
 
@@ -81,6 +82,7 @@ function evaluationMatchesArea(evaluation: EvaluationSummary, area: string) {
 }
 
 export default function StudentsPage() {
+  const searchParams = useSearchParams();
   const [students, setStudents] = useState<Student[]>([]);
   const [evaluationsByStudent, setEvaluationsByStudent] = useState<
     Record<string, EvaluationSummary[]>
@@ -94,7 +96,10 @@ export default function StudentsPage() {
   const [modalityFilter, setModalityFilter] = useState("");
   const [tutorFilter, setTutorFilter] = useState("");
   const [academicStatusFilter, setAcademicStatusFilter] = useState("");
-  const [studentTab, setStudentTab] = useState<"active" | "finished">("active");
+  const studentTab =
+    searchParams.get("view") === "finished"
+      ? "finished"
+      : "active";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showStudentModal, setShowStudentModal] = useState(false);
@@ -314,11 +319,12 @@ export default function StudentsPage() {
             count: finishedStudentsCount,
           },
         ].map((tab) => (
-          <button
+          <Link
             key={tab.key}
-            type="button"
-            onClick={() =>
-              setStudentTab(tab.key as "active" | "finished")
+            href={
+              tab.key === "finished"
+                ? "/students?view=finished"
+                : "/students"
             }
             className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
               studentTab === tab.key
@@ -327,7 +333,7 @@ export default function StudentsPage() {
             }`}
           >
             {tab.label} ({tab.count})
-          </button>
+          </Link>
         ))}
       </div>
 

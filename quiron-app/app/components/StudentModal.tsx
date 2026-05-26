@@ -11,6 +11,7 @@ import {
   universityOptions,
 } from "../data/studentOptions";
 import { db } from "../lib/firebase";
+import { AreaRotation } from "../lib/rotations";
 
 type Props = {
   onClose: () => void;
@@ -26,6 +27,7 @@ export default function StudentModal({ onClose, onSaved }: Props) {
     university: "",
     career: "",
     areas: [] as string[],
+    rotations: [] as AreaRotation[],
     role: "",
     modality: "",
     tutor: "",
@@ -40,6 +42,41 @@ export default function StudentModal({ onClose, onSaved }: Props) {
       return {
         ...currentForm,
         areas,
+      };
+    });
+  }
+
+  function updateRotation(
+    area: string,
+    field: "startDate" | "endDate",
+    value: string
+  ) {
+    setForm((currentForm) => {
+      const existingRotation =
+        currentForm.rotations.find(
+          (rotation) => rotation.area === area
+        );
+      const otherRotations =
+        currentForm.rotations.filter(
+          (rotation) => rotation.area !== area
+        );
+
+      return {
+        ...currentForm,
+        rotations: [
+          ...otherRotations,
+          {
+            area,
+            startDate:
+              field === "startDate"
+                ? value
+                : existingRotation?.startDate || "",
+            endDate:
+              field === "endDate"
+                ? value
+                : existingRotation?.endDate || "",
+          },
+        ],
       };
     });
   }
@@ -63,6 +100,18 @@ export default function StudentModal({ onClose, onSaved }: Props) {
         career: form.career.trim(),
         areas: form.areas,
         area: form.areas[0],
+        rotations: form.areas.map((area) => {
+          const rotation = form.rotations.find(
+            (currentRotation) =>
+              currentRotation.area === area
+          );
+
+          return {
+            area,
+            startDate: rotation?.startDate || "",
+            endDate: rotation?.endDate || "",
+          };
+        }),
         role: form.role,
         modality: form.modality,
         tutor: form.tutor.trim(),
@@ -211,6 +260,66 @@ export default function StudentModal({ onClose, onSaved }: Props) {
               })}
             </div>
           </div>
+
+          {form.areas.length > 0 && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-slate-700">
+                Fechas de rotación
+              </p>
+
+              <div className="mt-3 grid gap-3">
+                {form.areas.map((area) => {
+                  const rotation = form.rotations.find(
+                    (currentRotation) =>
+                      currentRotation.area === area
+                  );
+
+                  return (
+                    <div
+                      key={area}
+                      className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[80px_1fr_1fr] sm:items-center"
+                    >
+                      <p className="font-semibold text-slate-700">
+                        {area}
+                      </p>
+
+                      <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        Inicio
+                        <input
+                          type="date"
+                          value={rotation?.startDate || ""}
+                          onChange={(event) =>
+                            updateRotation(
+                              area,
+                              "startDate",
+                              event.target.value
+                            )
+                          }
+                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700"
+                        />
+                      </label>
+
+                      <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        Fin
+                        <input
+                          type="date"
+                          value={rotation?.endDate || ""}
+                          onChange={(event) =>
+                            updateRotation(
+                              area,
+                              "endDate",
+                              event.target.value
+                            )
+                          }
+                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700"
+                        />
+                      </label>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <select

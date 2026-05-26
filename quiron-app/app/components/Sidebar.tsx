@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   usePathname,
   useRouter,
+  useSearchParams,
 } from "next/navigation";
 
 import {
@@ -19,6 +20,8 @@ export default function Sidebar() {
 
   const pathname =
     usePathname();
+  const searchParams =
+    useSearchParams();
 
   const router =
     useRouter();
@@ -39,8 +42,13 @@ export default function Sidebar() {
     },
 
     {
-      label: "Alumnos",
+      label: "Alumnos activos",
       href: "/students",
+    },
+
+    {
+      label: "Alumnos finalizados",
+      href: "/students?view=finished",
     },
 
   ];
@@ -73,7 +81,11 @@ export default function Sidebar() {
           {links.map((link) => {
 
             const active =
-              pathname === link.href;
+              link.href.includes("?")
+                ? pathname === "/students" &&
+                  searchParams.get("view") === "finished"
+                : pathname === link.href &&
+                  searchParams.get("view") !== "finished";
 
             return (
 

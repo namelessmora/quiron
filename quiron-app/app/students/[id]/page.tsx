@@ -418,6 +418,9 @@ export default function StudentDetail({
   const [editAreas, setEditAreas] =
     useState<string[]>([]);
 
+  const [editRotations, setEditRotations] =
+    useState<AreaRotation[]>([]);
+
   const [editRole, setEditRole] =
     useState("");
 
@@ -440,6 +443,38 @@ export default function StudentDetail({
         ? currentAreas.filter((currentArea) => currentArea !== area)
         : [...currentAreas, area]
     );
+  }
+
+  function updateEditRotation(
+    area: string,
+    field: "startDate" | "endDate",
+    value: string
+  ) {
+    setEditRotations((currentRotations) => {
+      const existingRotation =
+        currentRotations.find(
+          (rotation) => rotation.area === area
+        );
+      const otherRotations =
+        currentRotations.filter(
+          (rotation) => rotation.area !== area
+        );
+
+      return [
+        ...otherRotations,
+        {
+          area,
+          startDate:
+            field === "startDate"
+              ? value
+              : existingRotation?.startDate || "",
+          endDate:
+            field === "endDate"
+              ? value
+              : existingRotation?.endDate || "",
+        },
+      ];
+    });
   }
 
   const loadEvaluations = useCallback(async (
@@ -1006,6 +1041,19 @@ export default function StudentDetail({
 
     try {
       const primaryArea = editAreas[0] || "";
+      const nextRotations = editAreas.map((area) => {
+        const rotation =
+          editRotations.find(
+            (currentRotation) =>
+              currentRotation.area === area
+          );
+
+        return {
+          area,
+          startDate: rotation?.startDate || "",
+          endDate: rotation?.endDate || "",
+        };
+      });
 
       await updateDoc(
         doc(db, "students", student.id),
@@ -1015,6 +1063,7 @@ export default function StudentDetail({
           career: editCareer,
           area: primaryArea,
           areas: editAreas,
+          rotations: nextRotations,
           role: editRole,
           modality: editModality,
           tutor: editTutor,
@@ -1029,6 +1078,7 @@ export default function StudentDetail({
         career: editCareer,
         area: primaryArea,
         areas: editAreas,
+        rotations: nextRotations,
         role: editRole,
         modality: editModality,
         tutor: editTutor,
@@ -1359,6 +1409,7 @@ export default function StudentDetail({
               setEditUniversity(student.university || "");
               setEditCareer(student.career || "");
               setEditAreas(studentAreas(student));
+              setEditRotations(validRotations(student));
               setEditRole(student.role || "");
               setEditModality(student.modality || "");
               setEditTutor(student.tutor || "");
@@ -2051,7 +2102,7 @@ export default function StudentDetail({
 
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
 
-          <div className="bg-white rounded-3xl p-8 w-full max-w-xl">
+          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl bg-white p-8">
 
             <h2 className="text-3xl font-bold mb-6 text-[#1E293B]">
               Editar alumno
@@ -2151,6 +2202,67 @@ export default function StudentDetail({
                   })}
                 </div>
               </div>
+
+              {editAreas.length > 0 && (
+                <div className="rounded-2xl border border-gray-200 bg-slate-50 p-4 sm:col-span-2">
+                  <p className="text-sm font-semibold text-slate-700">
+                    Fechas de rotación
+                  </p>
+
+                  <div className="mt-3 grid gap-3">
+                    {editAreas.map((area) => {
+                      const rotation =
+                        editRotations.find(
+                          (currentRotation) =>
+                            currentRotation.area === area
+                        );
+
+                      return (
+                        <div
+                          key={area}
+                          className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[80px_1fr_1fr] sm:items-center"
+                        >
+                          <p className="font-semibold text-slate-700">
+                            {area}
+                          </p>
+
+                          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                            Inicio
+                            <input
+                              type="date"
+                              value={rotation?.startDate || ""}
+                              onChange={(event) =>
+                                updateEditRotation(
+                                  area,
+                                  "startDate",
+                                  event.target.value
+                                )
+                              }
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700"
+                            />
+                          </label>
+
+                          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                            Fin
+                            <input
+                              type="date"
+                              value={rotation?.endDate || ""}
+                              onChange={(event) =>
+                                updateEditRotation(
+                                  area,
+                                  "endDate",
+                                  event.target.value
+                                )
+                              }
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700"
+                            />
+                          </label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <select
                 value={editRole}
