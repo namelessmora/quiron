@@ -1118,251 +1118,199 @@ export default function StudentDetail({
 
   return (
 
-    <div className="p-10 max-w-5xl">
+    <div className="mx-auto w-full max-w-7xl px-6 py-8 lg:px-10">
 
-      <div className="flex items-center justify-between mb-8">
+      <header className="mb-8 flex flex-col gap-5 border-b border-slate-200 pb-6 lg:flex-row lg:items-end lg:justify-between">
 
         <div>
 
-          <h1 className="text-6xl font-bold text-[#1E293B] mb-4">
+          <p className="text-sm font-semibold uppercase tracking-wide text-indigo-600">
+            Perfil clínico
+          </p>
+
+          <h1 className="mt-2 text-4xl font-bold text-slate-900 lg:text-5xl">
             {student.name}
           </h1>
 
-          <p className="text-gray-500 text-xl">
-            Perfil clínico del alumno
+          <p className="mt-2 text-base text-slate-500">
+            Ficha académica, evaluaciones y seguimiento del interno.
           </p>
 
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
 
           <button
-            onClick={
-              handleExportPdf
-            }
-            className="bg-[#5B6CFF] hover:bg-[#4C5DF5] text-white px-6 py-4 rounded-3xl transition font-semibold"
+            onClick={handleExportPdf}
+            className="rounded-lg bg-indigo-600 px-5 py-3 font-semibold text-white transition hover:bg-indigo-700"
           >
             Exportar PDF
           </button>
 
           <button
             onClick={() => {
-
-              setEditName(
-                student.name || ""
-              );
-
-              setEditUniversity(
-                student.university || ""
-              );
-
-              setEditCareer(
-                student.career || ""
-              );
-
-              setEditArea(
-                student.area || ""
-              );
-
-              setEditTutor(
-                student.tutor || ""
-              );
-
-              setEditObservations(
-                student.observations || ""
-              );
+              setEditName(student.name || "");
+              setEditUniversity(student.university || "");
+              setEditCareer(student.career || "");
+              setEditArea(student.area || "");
+              setEditTutor(student.tutor || "");
+              setEditObservations(student.observations || "");
               setShowEditModal(true);
-
             }}
-            className="bg-white border border-gray-200 hover:border-[#5B6CFF] text-[#1E293B] px-6 py-4 rounded-3xl transition font-semibold"
+            className="rounded-lg border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50"
           >
             Editar alumno
           </button>
 
         </div>
 
-      </div>
+      </header>
 
-      <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm mb-8">
+      <section className="mb-8 grid gap-6 xl:grid-cols-[1fr_320px]">
 
-        <div className="grid grid-cols-2 gap-8">
+        <article className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
 
-          <div>
+          <div className="grid gap-4 sm:grid-cols-2">
 
-            <p className="text-gray-400 mb-1">
-              Universidad
-            </p>
+            {[
+              ["Universidad", student.university || "-"],
+              ["Carrera", student.career || "Sin definir"],
+              ["Área", student.area || "General"],
+              ["Tutor", student.tutor || "-"],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-4"
+              >
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  {label}
+                </p>
 
-            <p className="text-2xl font-semibold text-[#1E293B]">
-              {student.university}
-            </p>
-
-          </div>
-
-          <div>
-
-            <p className="text-gray-400 mb-1">
-              Carrera
-            </p>
-
-            <p className="text-2xl font-semibold text-[#1E293B]">
-              {student.career ||
-                "Sin definir"}
-            </p>
-
-          </div>
-
-          <div>
-
-            <p className="text-gray-400 mb-1">
-              Área
-            </p>
-
-            <p className="text-2xl font-semibold text-[#1E293B]">
-              {student.area ||
-                "General"}
-            </p>
+                <p className="mt-2 text-lg font-bold text-slate-900">
+                  {value}
+                </p>
+              </div>
+            ))}
 
           </div>
 
-          <div>
-
-            <p className="text-gray-400 mb-1">
-              Tutor
+          <div className="mt-5 rounded-lg border border-slate-100 bg-slate-50 px-4 py-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Observaciones generales
             </p>
 
-            <p className="text-2xl font-semibold text-[#1E293B]">
-              {student.tutor || "-"}
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+              {student.observations || "Sin observaciones registradas"}
             </p>
-
           </div>
 
+        </article>
+
+        <aside className="rounded-lg border border-indigo-100 bg-indigo-50 p-6 shadow-sm">
+          <p className="text-sm font-semibold text-indigo-600">
+            Promedio actual
+          </p>
+
+          <p className="mt-4 text-5xl font-bold text-indigo-700">
+            {student.average || "-"}
+          </p>
+
+          <p className="mt-3 text-sm leading-6 text-indigo-600">
+            Calculado a partir de las evaluaciones registradas para este alumno.
+          </p>
+        </aside>
+
+      </section>
+
+      <section>
+
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+
           <div>
+            <h2 className="text-2xl font-bold text-slate-900">
+              Evaluaciones
+            </h2>
 
-            <p className="text-gray-400 mb-1">
-              Promedio
+            <p className="mt-1 text-sm text-slate-500">
+              {evaluations.length} registros clínicos asociados.
             </p>
-
-            <p className="text-2xl font-semibold text-[#5B6CFF]">
-              {student.average || "-"}
-            </p>
-
           </div>
-<div className="col-span-2">
 
-  <p className="text-gray-400 mb-1">
-    Observaciones generales
-  </p>
+          <button
+            onClick={() => openNewEvaluationModal()}
+            className="w-fit rounded-lg bg-indigo-600 px-5 py-3 font-semibold text-white transition hover:bg-indigo-700"
+          >
+            Nueva evaluación
+          </button>
 
-  <div className="bg-[#F8FAFC] rounded-2xl p-5 mt-2">
-
-    <p className="text-[#1E293B] leading-relaxed whitespace-pre-wrap">
-      {student.observations ||
-        "Sin observaciones registradas"}
-    </p>
-
-  </div>
-
-</div>
         </div>
 
-      </div>
+        <div className="grid gap-4">
 
-      <div className="flex items-center justify-between mb-8">
+          {evaluations.length === 0 ? (
 
-        <h2 className="text-4xl font-bold text-[#1E293B]">
-          Evaluaciones
-        </h2>
+            <div className="rounded-lg border border-dashed border-slate-200 bg-white p-8 text-center text-slate-500">
+              Sin evaluaciones registradas
+            </div>
 
-	        <button
-	          onClick={() =>
-	            openNewEvaluationModal()
-	          }
-          className="bg-[#5B6CFF] hover:bg-[#4C5DF5] text-white px-6 py-4 rounded-3xl transition font-semibold"
-        >
-          + Nueva evaluación
-        </button>
+          ) : (
 
-      </div>
+            evaluations.map((evaluation) => (
 
-      <div className="grid gap-6">
-
-        {evaluations.length === 0 ? (
-
-          <div className="bg-white rounded-3xl p-8 border border-gray-100 text-gray-500">
-            Sin evaluaciones registradas
-          </div>
-
-        ) : (
-
-          evaluations.map(
-            (evaluation) => (
-
-              <div
+              <article
                 key={evaluation.id}
-                className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm"
+                className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
               >
 
-                <div className="flex items-start justify-between mb-4">
+                <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
 
                   <div>
 
-                    <h3 className="text-2xl font-bold text-[#1E293B]">
-                      {evaluation.title}
-                    </h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-xl font-bold text-slate-900">
+                        {evaluation.title}
+                      </h3>
 
-                    <p className="text-gray-500 mt-1 text-sm">
-                      {evaluation.createdBy}
-                    </p>
+                      {evaluation.rubricName && (
+                        <span className="rounded-lg bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-600">
+                          {evaluation.rubricName}
+                        </span>
+                      )}
+                    </div>
 
-	                    <p className="text-gray-400 text-sm mt-1">
-	                      {evaluation.createdAt?.seconds
-                        ? new Date(
-                            evaluation.createdAt.seconds *
-                              1000
-                          ).toLocaleDateString(
-                            "es-CL",
-                            {
+                    <div className="mt-2 flex flex-wrap gap-3 text-sm text-slate-500">
+                      <span>{evaluation.createdBy || "Usuario"}</span>
+                      <span>
+                        {evaluation.createdAt?.seconds
+                          ? new Date(
+                              evaluation.createdAt.seconds * 1000
+                            ).toLocaleDateString("es-CL", {
                               day: "numeric",
                               month: "long",
                               year: "numeric",
-                            }
-                          )
-	                        : "Fecha pendiente"}
-	                    </p>
+                            })
+                          : "Fecha pendiente"}
+                      </span>
+                    </div>
 
-                    {evaluation.rubricName && (
-                      <p className="text-[#5B6CFF] text-sm mt-2 font-semibold">
-                        {evaluation.rubricName}
-                      </p>
-                    )}
+                  </div>
 
-	                  </div>
+                  <div className="flex flex-wrap items-center gap-2 lg:justify-end">
 
-                  <div className="flex items-center gap-3">
-
-	                    <div className="bg-[#EEF0FF] text-[#5B6CFF] px-5 py-3 rounded-2xl text-xl font-bold">
-	                      {evaluation.score}
-	                    </div>
+                    <div className="rounded-lg bg-indigo-50 px-4 py-2 text-xl font-bold text-indigo-600">
+                      {evaluation.score}
+                    </div>
 
                     <button
-                      onClick={() =>
-                        openEvaluationEditor(
-                          evaluation
-                        )
-                      }
-                      className="bg-white border border-gray-200 text-[#1E293B] px-4 py-3 rounded-2xl hover:border-[#5B6CFF] transition"
+                      onClick={() => openEvaluationEditor(evaluation)}
+                      className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50"
                     >
                       Editar
                     </button>
 
-	                    <button
-	                      onClick={() =>
-	                        handleDeleteEvaluation(
-	                          evaluation.id
-                        )
-                      }
-                      className="bg-red-50 text-red-500 px-4 py-3 rounded-2xl hover:bg-red-100 transition"
+                    <button
+                      onClick={() => handleDeleteEvaluation(evaluation.id)}
+                      className="rounded-lg border border-red-100 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100"
                     >
                       Eliminar
                     </button>
@@ -1371,29 +1319,29 @@ export default function StudentDetail({
 
                 </div>
 
-                <p className="text-gray-700 leading-relaxed">
-                  {evaluation.description ||
-                    "Sin comentarios"}
+                <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                  {evaluation.description || "Sin comentarios"}
                 </p>
-{evaluation.rubricLink && (
 
-  <a
-    href={evaluation.rubricLink}
-    target="_blank"
-    className="inline-flex items-center gap-2 mt-5 text-[#5B6CFF] font-semibold hover:underline"
-  >
-    📄 Ver rúbrica
-  </a>
+                {evaluation.rubricLink && (
+                  <a
+                    href={evaluation.rubricLink}
+                    target="_blank"
+                    className="mt-4 inline-flex text-sm font-semibold text-indigo-600 hover:underline"
+                  >
+                    Ver rúbrica
+                  </a>
+                )}
 
-)}
-              </div>
+              </article>
 
-            )
-          )
+            ))
 
-        )}
+          )}
 
-      </div>
+        </div>
+
+      </section>
 
       {showModal && (
 
