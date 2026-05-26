@@ -133,6 +133,9 @@ function mergeRotations(
       area: rotation.area,
       startDate: rotation.startDate || previous?.startDate || "",
       endDate: rotation.endDate || previous?.endDate || "",
+      room: rotation.room || previous?.room || "",
+      studentNotice:
+        rotation.studentNotice || previous?.studentNotice || "",
     });
   });
 
@@ -261,11 +264,19 @@ export default function ImportPage() {
             "Fecha fin internado",
           ])
         );
+        const room = textValue(
+          rowValue(row, ["Sala", "Unidad", "Sala unidad", "Servicio"])
+        ).trim();
+        const studentNotice = textValue(
+          rowValue(row, ["Aviso", "Aviso alumno", "Observación sala"])
+        ).trim();
         const rotation = area
           ? {
               area,
               startDate,
               endDate,
+              room,
+              studentNotice,
             }
           : null;
 

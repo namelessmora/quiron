@@ -466,7 +466,7 @@ export default function StudentDetail({
 
   function updateEditRotation(
     area: string,
-    field: "startDate" | "endDate",
+    field: "startDate" | "endDate" | "room" | "studentNotice",
     value: string
   ) {
     setEditRotations((currentRotations) => {
@@ -491,6 +491,14 @@ export default function StudentDetail({
             field === "endDate"
               ? value
               : existingRotation?.endDate || "",
+          room:
+            field === "room"
+              ? value
+              : existingRotation?.room || "",
+          studentNotice:
+            field === "studentNotice"
+              ? value
+              : existingRotation?.studentNotice || "",
         },
       ];
     });
@@ -1096,6 +1104,8 @@ export default function StudentDetail({
           area,
           startDate: rotation?.startDate || "",
           endDate: rotation?.endDate || "",
+          room: rotation?.room || "",
+          studentNotice: rotation?.studentNotice || "",
         };
       });
       const nextTutor =
@@ -1587,6 +1597,23 @@ export default function StudentDetail({
                       {formatRotationDate(rotation.endDate)}
                     </span>
                   </p>
+                  {(rotation.room || rotation.studentNotice) && (
+                    <div className="mt-3 rounded-lg bg-white px-3 py-2 text-sm text-slate-600">
+                      {rotation.room && (
+                        <p>
+                          Sala:{" "}
+                          <span className="font-semibold text-slate-800">
+                            {rotation.room}
+                          </span>
+                        </p>
+                      )}
+                      {rotation.studentNotice && (
+                        <p className="mt-1">
+                          {rotation.studentNotice}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -2319,7 +2346,7 @@ export default function StudentDetail({
                       return (
                         <div
                           key={area}
-                          className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[80px_1fr_1fr] sm:items-center"
+                          className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[80px_1fr_1fr] sm:items-center lg:grid-cols-[80px_1fr_1fr_1fr]"
                         >
                           <p className="font-semibold text-slate-700">
                             {area}
@@ -2353,6 +2380,40 @@ export default function StudentDetail({
                                   event.target.value
                                 )
                               }
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700"
+                            />
+                          </label>
+
+                          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                            Sala/unidad
+                            <input
+                              type="text"
+                              value={rotation?.room || ""}
+                              onChange={(event) =>
+                                updateEditRotation(
+                                  area,
+                                  "room",
+                                  event.target.value
+                                )
+                              }
+                              placeholder="Ej: Sala 3"
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700"
+                            />
+                          </label>
+
+                          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:col-span-3 lg:col-span-4">
+                            Aviso para alumno
+                            <input
+                              type="text"
+                              value={rotation?.studentNotice || ""}
+                              onChange={(event) =>
+                                updateEditRotation(
+                                  area,
+                                  "studentNotice",
+                                  event.target.value
+                                )
+                              }
+                              placeholder="Ej: Presentarse en sala 3 desde las 08:00"
                               className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700"
                             />
                           </label>

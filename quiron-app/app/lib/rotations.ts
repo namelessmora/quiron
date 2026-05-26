@@ -4,6 +4,8 @@ export type AreaRotation = {
   area: string;
   startDate?: string;
   endDate?: string;
+  room?: string;
+  studentNotice?: string;
 };
 
 export type StudentWithRotations = {

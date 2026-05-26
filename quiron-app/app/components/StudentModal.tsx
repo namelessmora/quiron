@@ -57,7 +57,7 @@ export default function StudentModal({ onClose, onSaved }: Props) {
 
   function updateRotation(
     area: string,
-    field: "startDate" | "endDate",
+    field: "startDate" | "endDate" | "room" | "studentNotice",
     value: string
   ) {
     setForm((currentForm) => {
@@ -84,6 +84,14 @@ export default function StudentModal({ onClose, onSaved }: Props) {
               field === "endDate"
                 ? value
                 : existingRotation?.endDate || "",
+            room:
+              field === "room"
+                ? value
+                : existingRotation?.room || "",
+            studentNotice:
+              field === "studentNotice"
+                ? value
+                : existingRotation?.studentNotice || "",
           },
         ],
       };
@@ -136,6 +144,8 @@ export default function StudentModal({ onClose, onSaved }: Props) {
             area,
             startDate: rotation?.startDate || "",
             endDate: rotation?.endDate || "",
+            room: rotation?.room || "",
+            studentNotice: rotation?.studentNotice || "",
           };
         }),
         role: form.role,
@@ -358,7 +368,7 @@ export default function StudentModal({ onClose, onSaved }: Props) {
                   return (
                     <div
                       key={area}
-                      className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[80px_1fr_1fr] sm:items-center"
+                          className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[80px_1fr_1fr] sm:items-center lg:grid-cols-[80px_1fr_1fr_1fr]"
                     >
                       <p className="font-semibold text-slate-700">
                         {area}
@@ -392,6 +402,40 @@ export default function StudentModal({ onClose, onSaved }: Props) {
                               event.target.value
                             )
                           }
+                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700"
+                        />
+                      </label>
+
+                      <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        Sala/unidad
+                        <input
+                          type="text"
+                          value={rotation?.room || ""}
+                          onChange={(event) =>
+                            updateRotation(
+                              area,
+                              "room",
+                              event.target.value
+                            )
+                          }
+                          placeholder="Ej: TC sala 2"
+                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700"
+                        />
+                      </label>
+
+                      <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:col-span-3 lg:col-span-4">
+                        Aviso para alumno
+                        <input
+                          type="text"
+                          value={rotation?.studentNotice || ""}
+                          onChange={(event) =>
+                            updateRotation(
+                              area,
+                              "studentNotice",
+                              event.target.value
+                            )
+                          }
+                          placeholder="Ej: Presentarse en sala 3 desde las 08:00"
                           className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700"
                         />
                       </label>
