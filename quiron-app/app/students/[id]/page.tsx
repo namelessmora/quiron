@@ -1629,22 +1629,9 @@ export default function StudentDetail({
         evaluation.description || "Sin comentarios",
         contentWidth - 12
       );
-      const responseRows = (evaluation.rubricResponses || [])
-        .slice(0, 6)
-        .map((response) =>
-          pdf.splitTextToSize(
-            `${response.dimension}: ${response.criterion} · ${response.label} (${response.score})`,
-            contentWidth - 14
-          )
-        );
-      const responseHeight =
-        responseRows.reduce(
-          (height, lines) => height + lines.length * 3.7 + 2.5,
-          0
-        ) + (responseRows.length > 0 ? 9 : 0);
       const cardHeight = Math.max(
         36,
-        35 + commentLines.length * 4.2 + responseHeight
+        35 + commentLines.length * 4.2
       );
 
       addPageIfNeeded(cardHeight + 8);
@@ -1683,34 +1670,6 @@ export default function StudentDetail({
       setColor(slate);
       pdf.text(commentLines, margin + 5, cursorY + 28);
 
-      let responseY = cursorY + 31 + commentLines.length * 4.2;
-      if (evaluation.rubricResponses && evaluation.rubricResponses.length > 0) {
-        pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(8.5);
-        setColor(slate);
-        pdf.text("Respuestas principales", margin + 5, responseY);
-        responseY += 5;
-        pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(8);
-        setColor(muted);
-        responseRows.forEach((lines) => {
-          pdf.text(
-            lines,
-            margin + 5,
-            responseY
-          );
-          responseY += lines.length * 3.7 + 2.5;
-        });
-
-        if (evaluation.rubricResponses.length > 6) {
-          pdf.text(
-            `+ ${evaluation.rubricResponses.length - 6} respuestas adicionales en la pauta completa`,
-            margin + 5,
-            responseY
-          );
-        }
-      }
-
       if (evaluation.rubricLink) {
         pdf.setFont("helvetica", "normal");
         pdf.setFontSize(8);
@@ -1724,6 +1683,114 @@ export default function StudentDetail({
       }
 
       cursorY += cardHeight + 6;
+
+      if (
+        evaluation.rubricResponses &&
+        evaluation.rubricResponses.length > 0
+      ) {
+        const groupedResponses = evaluation.rubricResponses.reduce<
+          Array<{
+            title: string;
+            responses: RubricResponse[];
+          }>
+        >((groups, response) => {
+          const title = response.group
+            ? `${response.group} · ${response.dimension}`
+            : response.dimension || "Sin dimension";
+          const existingGroup = groups.find(
+            (group) => group.title === title
+          );
+
+          if (existingGroup) {
+            existingGroup.responses.push(response);
+          } else {
+            groups.push({
+              title,
+              responses: [response],
+            });
+          }
+
+          return groups;
+        }, []);
+
+        addPageIfNeeded(18);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(10);
+        setColor(slate);
+        pdf.text("Pauta completa", margin + 2, cursorY);
+        cursorY += 6;
+
+        groupedResponses.forEach((group) => {
+          addPageIfNeeded(16);
+          pdf.setFillColor(238, 242, 255);
+          pdf.roundedRect(margin, cursorY, contentWidth, 9, 2, 2, "F");
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(8.5);
+          setColor(indigo);
+          pdf.text(
+            pdf.splitTextToSize(group.title, contentWidth - 8),
+            margin + 4,
+            cursorY + 6
+          );
+          cursorY += 12;
+
+          group.responses.forEach((response) => {
+            const criterionLines = pdf.splitTextToSize(
+              response.criterion || "-",
+              contentWidth - 42
+            );
+            const labelLines = pdf.splitTextToSize(
+              response.label || "-",
+              contentWidth - 42
+            );
+            const rowHeight = Math.max(
+              17,
+              12 + (criterionLines.length + labelLines.length) * 3.4
+            );
+
+            addPageIfNeeded(rowHeight + 4);
+            pdf.setFillColor(255, 255, 255);
+            pdf.setDrawColor(border[0], border[1], border[2]);
+            pdf.roundedRect(
+              margin,
+              cursorY,
+              contentWidth,
+              rowHeight,
+              2,
+              2,
+              "FD"
+            );
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(7.5);
+            setColor(muted);
+            pdf.text("CRITERIO", margin + 4, cursorY + 5);
+            pdf.text("SELECCION", margin + 4, cursorY + 11);
+            pdf.text("PUNTAJE", pageWidth - margin - 18, cursorY + 5);
+
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(8);
+            setColor(slate);
+            pdf.text(criterionLines, margin + 28, cursorY + 5);
+            pdf.text(
+              labelLines,
+              margin + 28,
+              cursorY + 11 + criterionLines.length * 3.4
+            );
+            pdf.setFont("helvetica", "bold");
+            setColor(indigo);
+            pdf.text(
+              String(response.score),
+              pageWidth - margin - 7,
+              cursorY + 11,
+              { align: "right" }
+            );
+
+            cursorY += rowHeight + 3;
+          });
+        });
+      } else {
+        emptyState("Evaluacion sin pauta estructurada asociada.");
+      }
     });
 
     addPageDecor();
