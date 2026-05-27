@@ -204,6 +204,27 @@ function exportCsv(filename: string, rows: string[][]) {
   URL.revokeObjectURL(url);
 }
 
+function firestoreErrorCode(error: unknown) {
+  return typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof error.code === "string"
+    ? error.code
+    : "";
+}
+
+function attendanceSaveErrorMessage(error: unknown) {
+  const code = firestoreErrorCode(error);
+
+  if (code === "permission-denied") {
+    return "Firebase rechazó el permiso para guardar asistencia. Revisa que tu usuario esté en Configuración > Accesos como admin/docente y que las reglas de Firestore estén publicadas.";
+  }
+
+  return code
+    ? `No se pudo guardar la asistencia (${code}).`
+    : "No se pudo guardar la asistencia.";
+}
+
 export default function AttendancePage() {
   const { user, role } =
     useCurrentUserPermissions();
@@ -449,7 +470,7 @@ export default function AttendancePage() {
       void loadAttendance();
     } catch (saveError) {
       console.error(saveError);
-      setError("No se pudo guardar la asistencia.");
+      setError(attendanceSaveErrorMessage(saveError));
     } finally {
       setSavingId("");
     }

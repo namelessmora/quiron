@@ -27,6 +27,8 @@ export function useCurrentUserPermissions() {
     useState<User | null>(auth.currentUser);
   const [remoteRole, setRemoteRole] =
     useState<UserRole | null>(null);
+  const [roleLoaded, setRoleLoaded] =
+    useState(false);
 
   useEffect(() => {
     const unsubscribe =
@@ -43,10 +45,12 @@ export function useCurrentUserPermissions() {
 
       if (!email) {
         setRemoteRole(null);
+        setRoleLoaded(true);
         return;
       }
 
       try {
+        setRoleLoaded(false);
         const accessDoc = await getDoc(
           doc(db, "userAccess", email)
         );
@@ -59,6 +63,7 @@ export function useCurrentUserPermissions() {
             role === "student")
         ) {
           setRemoteRole(role);
+          setRoleLoaded(true);
           return;
         }
       } catch (error) {
@@ -67,6 +72,7 @@ export function useCurrentUserPermissions() {
 
       if (active) {
         setRemoteRole(null);
+        setRoleLoaded(true);
       }
     }
 
@@ -77,7 +83,7 @@ export function useCurrentUserPermissions() {
     };
   }, [user?.email]);
 
-  const role = remoteRole || resolveUserRole(user);
+  const role = remoteRole || (roleLoaded ? "student" : resolveUserRole(user));
   const permissions = useMemo(
     () => permissionsForRole(role),
     [role]
