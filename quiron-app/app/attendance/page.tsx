@@ -31,6 +31,8 @@ type Student = {
   id: string;
   name: string;
   email?: string;
+  university?: string;
+  career?: string;
   area?: string;
   areas?: string[];
   modality?: string;
@@ -204,6 +206,21 @@ function exportCsv(filename: string, rows: string[][]) {
   URL.revokeObjectURL(url);
 }
 
+function monthInputValue(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+  ].join("-");
+}
+
+function rotationRoom(rotation?: AreaRotation) {
+  return rotation?.room || "Sin sala";
+}
+
+function recordKey(record: Pick<AttendanceRecord, "studentId" | "date" | "area">) {
+  return `${record.studentId}-${record.date}-${record.area}`;
+}
+
 function firestoreErrorCode(error: unknown) {
   return typeof error === "object" &&
     error !== null &&
@@ -238,11 +255,21 @@ export default function AttendancePage() {
     useState("");
   const [selectedArea, setSelectedArea] =
     useState("");
+  const [selectedTutor, setSelectedTutor] =
+    useState("");
+  const [selectedModality, setSelectedModality] =
+    useState("");
+  const [selectedRoom, setSelectedRoom] =
+    useState("");
+  const [selectedMonth, setSelectedMonth] =
+    useState(() => monthInputValue(new Date()));
   const [loading, setLoading] =
     useState(true);
   const [savingId, setSavingId] =
     useState("");
   const [error, setError] =
+    useState("");
+  const [notice, setNotice] =
     useState("");
 
   const selectedDateObject = useMemo(
@@ -339,6 +366,66 @@ export default function AttendancePage() {
     });
   }, [loadAttendance]);
 
+  const visibleStudentMap = useMemo(
+    () =>
+      students.reduce<Record<string, Student>>((summary, student) => {
+        summary[student.id] = student;
+
+        return summary;
+      }, {}),
+    [students]
+  );
+
+  const tutorOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          students
+            .flatMap((student) => [
+              student.tutor || "",
+              ...(student.tutorEmails || []),
+            ])
+            .map((tutor) => tutor.trim())
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b, "es")),
+    [students]
+  );
+
+  const roomOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          students
+            .flatMap((student) => student.rotations || [])
+            .map((rotation) => rotation.room || "")
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b, "es")),
+    [students]
+  );
+
+  const studentMatchesFilters = useCallback(
+    (student: Student, rotation?: AreaRotation) =>
+      (!selectedStudentId || student.id === selectedStudentId) &&
+      (!selectedArea || rotation?.area === selectedArea) &&
+      (!selectedTutor ||
+        student.tutor === selectedTutor ||
+        (student.tutorEmails || []).includes(selectedTutor)) &&
+      (!selectedModality ||
+        (rotation
+          ? rotationModality(student, rotation) === selectedModality
+          : student.modality === selectedModality)) &&
+      (!selectedRoom || rotation?.room === selectedRoom),
+    [
+      selectedArea,
+      selectedModality,
+      selectedRoom,
+      selectedStudentId,
+      selectedTutor,
+    ]
+  );
+
   const scheduledStudents = useMemo(
     () =>
       students
@@ -354,43 +441,107 @@ export default function AttendancePage() {
           };
         })
         .filter((item) => item.shouldAttend)
-        .filter(
-          (item) =>
-            (!selectedStudentId ||
-              item.student.id === selectedStudentId) &&
-            (!selectedArea ||
-              item.rotation?.area === selectedArea)
+        .filter((item) =>
+          studentMatchesFilters(item.student, item.rotation || undefined)
         ),
-    [selectedArea, selectedDateObject, selectedStudentId, students]
+    [selectedDateObject, studentMatchesFilters, students]
   );
 
   const filteredRecords = useMemo(
     () =>
-      records.filter(
-        (record) =>
-          (!selectedStudentId ||
-            record.studentId === selectedStudentId) &&
-          (!selectedArea || record.area === selectedArea)
-      ),
-    [records, selectedArea, selectedStudentId]
+      records.filter((record) => {
+        const student = visibleStudentMap[record.studentId];
+        const rotation = student?.rotations?.find(
+          (currentRotation) => currentRotation.area === record.area
+        );
+
+        if (!student) {
+          return (
+            (!selectedStudentId ||
+              record.studentId === selectedStudentId) &&
+            (!selectedArea || record.area === selectedArea) &&
+            (!selectedModality || record.modality === selectedModality)
+          );
+        }
+
+        return studentMatchesFilters(student, rotation);
+      }),
+    [
+      records,
+      selectedArea,
+      selectedModality,
+      selectedStudentId,
+      studentMatchesFilters,
+      visibleStudentMap,
+    ]
   );
 
   const recordsByStudentDateArea = useMemo(
     () =>
       records.reduce<Record<string, AttendanceRecord>>((summary, record) => {
-        const key = `${record.studentId}-${record.date}-${record.area}`;
-
-        summary[key] = record;
+        summary[recordKey(record)] = record;
 
         return summary;
       }, {}),
     [records]
   );
 
+  const unmarkedScheduled = useMemo(
+    () =>
+      scheduledStudents.filter(({ student, rotation }) => {
+        if (!rotation) return false;
+
+        return !recordsByStudentDateArea[
+          `${student.id}-${selectedDate}-${rotation.area}`
+        ];
+      }),
+    [recordsByStudentDateArea, scheduledStudents, selectedDate]
+  );
+
+  const pendingRecoveryRecords = useMemo(
+    () =>
+      filteredRecords.filter(
+        (record) =>
+          record.status === "absent" &&
+          (record.recoveryStatus === "pending" ||
+            record.recoveryStatus === "later")
+      ),
+    [filteredRecords]
+  );
+
+  const endingSoonRotations = useMemo(() => {
+    const today = parseLocalDate(selectedDate) || new Date();
+    const limit = addDays(today, 7);
+
+    return students.flatMap((student) =>
+      (student.rotations || [])
+        .filter((rotation) => {
+          const endDate = parseLocalDate(rotation.endDate);
+
+          return (
+            endDate &&
+            endDate >= today &&
+            endDate <= limit &&
+            studentMatchesFilters(student, rotation)
+          );
+        })
+        .map((rotation) => ({ student, rotation }))
+    );
+  }, [selectedDate, studentMatchesFilters, students]);
+
+  const monthlyRecords = useMemo(
+    () =>
+      filteredRecords.filter((record) =>
+        (record.date || "").startsWith(selectedMonth)
+      ),
+    [filteredRecords, selectedMonth]
+  );
+
   async function saveAttendance(
     student: Student,
     rotation: AreaRotation,
-    status: AttendanceStatus
+    status: AttendanceStatus,
+    options: { refresh?: boolean; silent?: boolean } = {}
   ) {
     if (!canManageAttendance || !user?.email) return;
 
@@ -443,8 +594,7 @@ export default function AttendancePage() {
 
       setRecords((currentRecords) => {
         const otherRecords = currentRecords.filter(
-          (record) =>
-            `${record.studentId}-${record.date}-${record.area}` !== key
+          (record) => recordKey(record) !== key
         );
 
         return [savedRecord, ...otherRecords].sort((a, b) =>
@@ -467,10 +617,46 @@ export default function AttendancePage() {
           recoveryDate: suggestedRecovery,
         },
       });
-      void loadAttendance();
+      if (!options.silent) {
+        setNotice(
+          status === "present"
+            ? `Asistencia guardada para ${student.name}.`
+            : `Inasistencia guardada para ${student.name}.`
+        );
+      }
+      if (options.refresh !== false) {
+        void loadAttendance();
+      }
     } catch (saveError) {
       console.error(saveError);
       setError(attendanceSaveErrorMessage(saveError));
+    } finally {
+      setSavingId("");
+    }
+  }
+
+  async function markAllPresent() {
+    if (!canManageAttendance || unmarkedScheduled.length === 0) return;
+
+    try {
+      setSavingId("bulk");
+      setError("");
+
+      for (const { student, rotation } of unmarkedScheduled) {
+        if (rotation) {
+          await saveAttendance(student, rotation, "present", {
+            refresh: false,
+            silent: true,
+          });
+        }
+      }
+
+      setNotice(
+        `${unmarkedScheduled.length} asistencia${
+          unmarkedScheduled.length === 1 ? "" : "s"
+        } guardada${unmarkedScheduled.length === 1 ? "" : "s"}.`
+      );
+      void loadAttendance();
     } finally {
       setSavingId("");
     }
@@ -519,6 +705,7 @@ export default function AttendancePage() {
           recoveryDate: record.recoveryDate,
         },
       });
+      setNotice("Recuperación actualizada.");
       await loadAttendance();
     } catch (saveError) {
       console.error(saveError);
@@ -555,12 +742,56 @@ export default function AttendancePage() {
     ];
   }
 
+  function exportMonthlyRows() {
+    return [
+      [
+        "Alumno",
+        "Correo",
+        "Universidad",
+        "Tutor",
+        "Área",
+        "Sala",
+        "Fecha",
+        "Modalidad",
+        "Asistencia",
+        "Recuperación",
+        "Fecha recuperación",
+        "Registrado por",
+      ],
+      ...monthlyRecords.map((record) => {
+        const student = visibleStudentMap[record.studentId];
+        const rotation = student?.rotations?.find(
+          (currentRotation) => currentRotation.area === record.area
+        );
+
+        return [
+          record.studentName,
+          record.studentEmail || "",
+          student?.university || "",
+          student?.tutor || (student?.tutorEmails || []).join(", "),
+          record.area || "",
+          rotation?.room || "",
+          record.date || "",
+          record.modality || "",
+          record.status ? statusLabels[record.status] : "",
+          recoveryLabels[record.recoveryStatus || "none"],
+          record.recoveryDate || "",
+          record.markedBy || "",
+        ];
+      }),
+    ];
+  }
+
   function exportCsvRecords() {
     exportCsv(`asistencia-${selectedDate}.csv`, exportRows());
   }
 
   function exportExcelRecords() {
     exportSpreadsheet(`asistencia-${selectedDate}.xlsx`, exportRows());
+  }
+
+  function exportMonthlyExcelRecords() {
+    exportSpreadsheet(`asistencia-mensual-${selectedMonth}.xlsx`, exportMonthlyRows());
   }
 
   return (
@@ -594,7 +825,20 @@ export default function AttendancePage() {
         </div>
       )}
 
-      <section className="mb-6 grid gap-4 md:grid-cols-3">
+      {notice && (
+        <div className="mb-6 flex items-center justify-between gap-3 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+          <span>{notice}</span>
+          <button
+            type="button"
+            onClick={() => setNotice("")}
+            className="rounded-lg px-2 py-1 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
+
+      <section className="mb-6 grid gap-4 md:grid-cols-3 xl:grid-cols-6">
         <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-semibold text-slate-400">
             Programados
@@ -625,10 +869,110 @@ export default function AttendancePage() {
             }
           </p>
         </article>
+        <article className="rounded-lg border border-amber-100 bg-amber-50 p-5">
+          <p className="text-sm font-semibold text-amber-700">
+            Sin marcar
+          </p>
+          <p className="mt-2 text-3xl font-bold text-amber-900">
+            {loading ? "-" : unmarkedScheduled.length}
+          </p>
+        </article>
+        <article className="rounded-lg border border-indigo-100 bg-indigo-50 p-5">
+          <p className="text-sm font-semibold text-indigo-700">
+            Recuperaciones
+          </p>
+          <p className="mt-2 text-3xl font-bold text-indigo-900">
+            {pendingRecoveryRecords.length}
+          </p>
+        </article>
+        <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-sm font-semibold text-slate-400">
+            Finalizan 7 días
+          </p>
+          <p className="mt-2 text-3xl font-bold text-slate-900">
+            {endingSoonRotations.length}
+          </p>
+        </article>
       </section>
 
+      {(unmarkedScheduled.length > 0 ||
+        pendingRecoveryRecords.length > 0 ||
+        endingSoonRotations.length > 0) && (
+        <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900">
+                Pendientes operativos
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Seguimiento rápido de asistencia, recuperaciones y cierres.
+              </p>
+            </div>
+            {canManageAttendance && unmarkedScheduled.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void markAllPresent()}
+                disabled={Boolean(savingId)}
+                className="w-fit rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+              >
+                Marcar todos asistieron
+              </button>
+            )}
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            <div className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3">
+              <p className="text-sm font-bold text-amber-800">
+                Sin asistencia marcada
+              </p>
+              <p className="mt-1 text-sm text-amber-700">
+                {unmarkedScheduled.length === 0
+                  ? "Todo el día está marcado."
+                  : unmarkedScheduled
+                      .slice(0, 3)
+                      .map(({ student, rotation }) =>
+                        `${student.name} (${rotation?.area || "-"})`
+                      )
+                      .join(", ")}
+              </p>
+            </div>
+            <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3">
+              <p className="text-sm font-bold text-indigo-800">
+                Recuperación pendiente
+              </p>
+              <p className="mt-1 text-sm text-indigo-700">
+                {pendingRecoveryRecords.length === 0
+                  ? "Sin recuperaciones pendientes."
+                  : pendingRecoveryRecords
+                      .slice(0, 3)
+                      .map((record) => `${record.studentName} (${record.area})`)
+                      .join(", ")}
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-sm font-bold text-slate-800">
+                Rotaciones por finalizar
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                {endingSoonRotations.length === 0
+                  ? "Sin cierres próximos."
+                  : endingSoonRotations
+                      .slice(0, 3)
+                      .map(
+                        ({ student, rotation }) =>
+                          `${student.name} (${rotation.area}, ${formatRotationDate(
+                            rotation.endDate
+                          )})`
+                      )
+                      .join(", ")}
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <input
             type="date"
             value={selectedDate}
@@ -662,6 +1006,49 @@ export default function AttendancePage() {
             ))}
           </select>
 
+          <select
+            value={selectedTutor}
+            onChange={(event) => setSelectedTutor(event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="">Todos los tutores</option>
+            {tutorOptions.map((tutor) => (
+              <option key={tutor} value={tutor}>
+                {tutor}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={selectedModality}
+            onChange={(event) => setSelectedModality(event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="">Todas las modalidades</option>
+            <option value="Diurno">Diurno</option>
+            <option value="4to Modificado">4to Modificado</option>
+          </select>
+
+          <select
+            value={selectedRoom}
+            onChange={(event) => setSelectedRoom(event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="">Todas las salas</option>
+            {roomOptions.map((room) => (
+              <option key={room} value={room}>
+                {room}
+              </option>
+            ))}
+          </select>
+
+          <input
+            type="month"
+            value={selectedMonth}
+            onChange={(event) => setSelectedMonth(event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          />
+
           <div className="flex gap-2">
             <button
               type="button"
@@ -680,6 +1067,15 @@ export default function AttendancePage() {
               Excel
             </button>
           </div>
+
+          <button
+            type="button"
+            onClick={exportMonthlyExcelRecords}
+            disabled={monthlyRecords.length === 0}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+          >
+            Excel mensual
+          </button>
         </div>
       </section>
 
@@ -720,7 +1116,8 @@ export default function AttendancePage() {
                       {student.name}
                     </p>
                     <p className="mt-1 text-sm text-slate-500">
-                      {rotation.area} · {rotationModality(student, rotation)}
+                      {rotation.area} · {rotationModality(student, rotation)} ·{" "}
+                      {rotationRoom(rotation)}
                     </p>
                     {record && (
                       <p className="mt-2 text-sm font-semibold text-slate-600">

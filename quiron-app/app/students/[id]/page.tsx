@@ -9,10 +9,12 @@ import {
   collection,
   addDoc,
   getDocs,
+  query,
   serverTimestamp,
   deleteDoc,
   updateDoc,
   Timestamp,
+  where,
 } from "firebase/firestore";
 
 import { db, auth } from "../../lib/firebase";
@@ -43,6 +45,7 @@ import {
   hasAssignedTutors,
   studentTutorLabel,
 } from "../../lib/tutors";
+import { normalizeEmail } from "../../lib/userRoles";
 
 type Student = {
   id: string;
@@ -72,6 +75,37 @@ type Evaluation = {
   rubricResponses?: RubricResponse[];
   createdBy?: string;
   createdAt?: Timestamp | { seconds?: number };
+};
+
+type AttendanceStatus = "present" | "absent";
+type RecoveryStatus = "none" | "pending" | "accepted" | "rejected" | "later";
+
+type AttendanceRecord = {
+  id: string;
+  studentId: string;
+  studentName: string;
+  studentEmail?: string;
+  area?: string;
+  date?: string;
+  status?: AttendanceStatus;
+  recoveryStatus?: RecoveryStatus;
+  recoveryDate?: string;
+  modality?: string;
+  markedBy?: string;
+  markedAt?: Timestamp | { seconds?: number } | Date | null;
+};
+
+const attendanceStatusLabels: Record<AttendanceStatus, string> = {
+  present: "Asistió",
+  absent: "No asistió",
+};
+
+const recoveryStatusLabels: Record<RecoveryStatus, string> = {
+  none: "Sin recuperación",
+  pending: "Recuperación sugerida",
+  accepted: "Recuperación aceptada",
+  rejected: "Recuperación rechazada",
+  later: "Recordar más tarde",
 };
 
 type RubricResponse = {
@@ -368,6 +402,8 @@ export default function StudentDetail({
 
   const [evaluations, setEvaluations] =
     useState<Evaluation[]>([]);
+  const [attendanceRecords, setAttendanceRecords] =
+    useState<AttendanceRecord[]>([]);
 
   const [loading, setLoading] =
     useState(true);
@@ -549,6 +585,37 @@ export default function StudentDetail({
     setEvaluations(data);
   }, []);
 
+  const loadAttendanceRecords = useCallback(async (
+    studentId: string,
+    studentEmail?: string
+  ) => {
+    const normalizedEmail = normalizeEmail(studentEmail);
+    const attendanceQuery =
+      role === "student" && normalizedEmail
+        ? query(
+            collection(db, "attendance"),
+            where("studentEmail", "==", normalizedEmail)
+          )
+        : query(
+            collection(db, "attendance"),
+            where("studentId", "==", studentId)
+          );
+    const snapshot = await getDocs(attendanceQuery);
+    const data = snapshot.docs
+      .map((attendanceDoc) => ({
+        id: attendanceDoc.id,
+        ...(attendanceDoc.data() as Omit<AttendanceRecord, "id">),
+      }))
+      .filter((record) => record.studentId === studentId)
+      .filter(
+        (record) =>
+          record.status === "present" || record.status === "absent"
+      )
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
+    setAttendanceRecords(data);
+  }, [role]);
+
   const loadStudent = useCallback(async () => {
 
     try {
@@ -580,6 +647,10 @@ export default function StudentDetail({
         loadEvaluations(
           resolvedParams.id
         );
+        loadAttendanceRecords(
+          resolvedParams.id,
+          studentData.email
+        );
       }
 
     } catch (error) {
@@ -591,7 +662,7 @@ export default function StudentDetail({
       setLoading(false);
 
     }
-  }, [loadEvaluations, params]);
+  }, [loadAttendanceRecords, loadEvaluations, params]);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -701,6 +772,28 @@ export default function StudentDetail({
 
     return items;
   }, [compatibleRubrics, evaluations, student]);
+
+  const attendanceSummary = useMemo(() => {
+    const present = attendanceRecords.filter(
+      (record) => record.status === "present"
+    ).length;
+    const absent = attendanceRecords.filter(
+      (record) => record.status === "absent"
+    ).length;
+    const pendingRecovery = attendanceRecords.filter(
+      (record) =>
+        record.status === "absent" &&
+        (record.recoveryStatus === "pending" ||
+          record.recoveryStatus === "later")
+    ).length;
+
+    return {
+      present,
+      absent,
+      pendingRecovery,
+      total: attendanceRecords.length,
+    };
+  }, [attendanceRecords]);
 
   const rubricGrade =
     selectedRubric
@@ -1684,6 +1777,99 @@ export default function StudentDetail({
             </div>
           </article>
         )}
+
+        <article className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900">
+                Historial de asistencia
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Resumen de asistencias, inasistencias y recuperaciones.
+              </p>
+            </div>
+            <span className="w-fit rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600">
+              {attendanceSummary.total} registros
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-4">
+              <p className="text-sm font-semibold text-emerald-700">
+                Asistencias
+              </p>
+              <p className="mt-2 text-3xl font-bold text-emerald-900">
+                {attendanceSummary.present}
+              </p>
+            </div>
+            <div className="rounded-lg border border-rose-100 bg-rose-50 px-4 py-4">
+              <p className="text-sm font-semibold text-rose-700">
+                Inasistencias
+              </p>
+              <p className="mt-2 text-3xl font-bold text-rose-900">
+                {attendanceSummary.absent}
+              </p>
+            </div>
+            <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-4">
+              <p className="text-sm font-semibold text-indigo-700">
+                Recuperación pendiente
+              </p>
+              <p className="mt-2 text-3xl font-bold text-indigo-900">
+                {attendanceSummary.pendingRecovery}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3">
+            {attendanceRecords.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                Sin asistencia registrada.
+              </div>
+            ) : (
+              attendanceRecords.slice(0, 6).map((record) => (
+                <div
+                  key={record.id}
+                  className="grid gap-3 rounded-lg border border-slate-100 bg-slate-50 px-4 py-3 sm:grid-cols-[1fr_auto] sm:items-center"
+                >
+                  <div>
+                    <div className="flex flex-wrap gap-2">
+                      <span
+                        className={`rounded-lg px-3 py-1 text-xs font-bold ${
+                          record.status === "present"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-rose-100 text-rose-700"
+                        }`}
+                      >
+                        {record.status
+                          ? attendanceStatusLabels[record.status]
+                          : "-"}
+                      </span>
+                      <span className="rounded-lg bg-white px-3 py-1 text-xs font-bold text-slate-600">
+                        {record.area || "Sin área"}
+                      </span>
+                      <span className="rounded-lg bg-white px-3 py-1 text-xs font-bold text-slate-600">
+                        {record.modality || student.modality || "Diurno"}
+                      </span>
+                    </div>
+                    {record.status === "absent" && (
+                      <p className="mt-2 text-sm font-semibold text-slate-600">
+                        {recoveryStatusLabels[
+                          record.recoveryStatus || "pending"
+                        ]}
+                        {record.recoveryDate
+                          ? ` · ${formatRotationDate(record.recoveryDate)}`
+                          : ""}
+                      </p>
+                    )}
+                  </div>
+                  <p className="text-sm font-bold text-slate-500">
+                    {formatRotationDate(record.date)}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        </article>
 
       </section>
 
