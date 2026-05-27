@@ -1629,10 +1629,22 @@ export default function StudentDetail({
         evaluation.description || "Sin comentarios",
         contentWidth - 12
       );
-      const responseCount = evaluation.rubricResponses?.length || 0;
+      const responseRows = (evaluation.rubricResponses || [])
+        .slice(0, 6)
+        .map((response) =>
+          pdf.splitTextToSize(
+            `${response.dimension}: ${response.criterion} · ${response.label} (${response.score})`,
+            contentWidth - 14
+          )
+        );
+      const responseHeight =
+        responseRows.reduce(
+          (height, lines) => height + lines.length * 3.7 + 2.5,
+          0
+        ) + (responseRows.length > 0 ? 9 : 0);
       const cardHeight = Math.max(
         36,
-        33 + commentLines.length * 4.2 + Math.min(responseCount, 8) * 4
+        35 + commentLines.length * 4.2 + responseHeight
       );
 
       addPageIfNeeded(cardHeight + 8);
@@ -1677,25 +1689,22 @@ export default function StudentDetail({
         pdf.setFontSize(8.5);
         setColor(slate);
         pdf.text("Respuestas principales", margin + 5, responseY);
-        responseY += 4;
+        responseY += 5;
         pdf.setFont("helvetica", "normal");
         pdf.setFontSize(8);
         setColor(muted);
-        evaluation.rubricResponses.slice(0, 8).forEach((response) => {
+        responseRows.forEach((lines) => {
           pdf.text(
-            pdf.splitTextToSize(
-              `${response.dimension}: ${response.criterion} · ${response.label} (${response.score})`,
-              contentWidth - 12
-            ),
+            lines,
             margin + 5,
             responseY
           );
-          responseY += 4;
+          responseY += lines.length * 3.7 + 2.5;
         });
 
-        if (evaluation.rubricResponses.length > 8) {
+        if (evaluation.rubricResponses.length > 6) {
           pdf.text(
-            `+ ${evaluation.rubricResponses.length - 8} respuestas adicionales`,
+            `+ ${evaluation.rubricResponses.length - 6} respuestas adicionales en la pauta completa`,
             margin + 5,
             responseY
           );

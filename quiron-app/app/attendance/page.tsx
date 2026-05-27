@@ -1095,16 +1095,15 @@ export default function AttendancePage() {
             {loading && (
               <div className="h-20 animate-pulse rounded-lg bg-slate-100" />
             )}
-            {!loading && scheduledStudents.length === 0 && (
+            {!loading && unmarkedScheduled.length === 0 && (
               <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                No hay alumnos programados para asistir en esta fecha.
+                No hay alumnos pendientes por marcar en esta fecha.
               </div>
             )}
-            {scheduledStudents.map(({ student, rotation }) => {
+            {unmarkedScheduled.map(({ student, rotation }) => {
               if (!rotation) return null;
 
               const key = `${student.id}-${selectedDate}-${rotation.area}`;
-              const record = recordsByStudentDateArea[key];
 
               return (
                 <article
@@ -1119,17 +1118,6 @@ export default function AttendancePage() {
                       {rotation.area} · {rotationModality(student, rotation)} ·{" "}
                       {rotationRoom(rotation)}
                     </p>
-                    {record && (
-                      <p className="mt-2 text-sm font-semibold text-slate-600">
-                        Registro:{" "}
-                        {record.status ? statusLabels[record.status] : "-"}
-                        {record.recoveryDate
-                          ? ` · Recuperación sugerida ${formatRotationDate(
-                              record.recoveryDate
-                            )}`
-                          : ""}
-                      </p>
-                    )}
                   </div>
 
                   <div className="flex flex-wrap gap-2">
