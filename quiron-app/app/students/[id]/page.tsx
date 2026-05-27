@@ -1314,6 +1314,8 @@ export default function StudentDetail({
 
     if (!student) return;
 
+    type PdfColor = [number, number, number];
+
     const pdf = new jsPDF({
       orientation: "portrait",
       unit: "mm",
@@ -1326,11 +1328,18 @@ export default function StudentDetail({
     const pageHeight =
       pdf.internal.pageSize.getHeight();
 
-    const margin = 18;
+    const margin = 16;
     const contentWidth =
       pageWidth - margin * 2;
 
-    let cursorY = 20;
+    const indigo: PdfColor = [79, 70, 229];
+    const slate: PdfColor = [30, 41, 59];
+    const muted: PdfColor = [100, 116, 139];
+    const border: PdfColor = [226, 232, 240];
+    const soft: PdfColor = [248, 250, 252];
+    const academicStatus = getAcademicStatus(student.average);
+
+    let cursorY = 18;
 
     function addPageIfNeeded(
       neededHeight = 12
@@ -1341,16 +1350,44 @@ export default function StudentDetail({
         pageHeight - margin
       ) {
         pdf.addPage();
-        cursorY = 20;
+        cursorY = 18;
       }
     }
 
-    function addText(
+    function setColor(color: PdfColor) {
+      pdf.setTextColor(color[0], color[1], color[2]);
+    }
+
+    function addPageDecor() {
+      const pages = pdf.getNumberOfPages();
+
+      for (let page = 1; page <= pages; page += 1) {
+        pdf.setPage(page);
+        pdf.setFillColor(245, 247, 255);
+        pdf.rect(0, 0, pageWidth, 9, "F");
+        pdf.setDrawColor(border[0], border[1], border[2]);
+        pdf.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(8);
+        setColor(muted);
+        pdf.text("Quiron · Informe clinico academico", margin, pageHeight - 7);
+        pdf.text(
+          `Pagina ${page} de ${pages}`,
+          pageWidth - margin,
+          pageHeight - 7,
+          { align: "right" }
+        );
+      }
+    }
+
+    function writeText(
       text: string,
       options: {
         size?: number;
         style?: "normal" | "bold";
-        color?: [number, number, number];
+        color?: PdfColor;
+        x?: number;
+        width?: number;
         gap?: number;
       } = {}
     ) {
@@ -1358,209 +1395,329 @@ export default function StudentDetail({
       const {
         size = 10,
         style = "normal",
-        color = [30, 41, 59],
-        gap = 6,
+        color = slate,
+        x = margin,
+        width = contentWidth,
+        gap = 4,
       } = options;
 
       pdf.setFont("helvetica", style);
       pdf.setFontSize(size);
-      pdf.setTextColor(...color);
+      setColor(color);
 
       const lines = pdf.splitTextToSize(
         text || "-",
-        contentWidth
+        width
       );
 
-      const lineHeight = size * 0.42;
+      const lineHeight = size * 0.48;
       addPageIfNeeded(
         lines.length * lineHeight + gap
       );
 
-      pdf.text(lines, margin, cursorY);
+      pdf.text(lines, x, cursorY);
       cursorY +=
         lines.length * lineHeight + gap;
     }
 
-    function addDivider() {
-
-      addPageIfNeeded(8);
-      pdf.setDrawColor(226, 232, 240);
-      pdf.line(
-        margin,
-        cursorY,
-        pageWidth - margin,
-        cursorY
-      );
-      cursorY += 8;
+    function sectionTitle(title: string) {
+      addPageIfNeeded(14);
+      cursorY += 3;
+      pdf.setFillColor(indigo[0], indigo[1], indigo[2]);
+      pdf.roundedRect(margin, cursorY - 5, 4, 4, 1, 1, "F");
+      writeText(title, {
+        size: 13,
+        style: "bold",
+        x: margin + 8,
+        gap: 5,
+      });
     }
 
-    addText("Informe clínico académico", {
-      size: 18,
-      style: "bold",
-      color: [79, 70, 229],
-      gap: 8,
+    function infoGrid(items: Array<[string, string]>) {
+      const gap = 4;
+      const columns = 2;
+      const cellWidth = (contentWidth - gap) / columns;
+      const cellHeight = 20;
+
+      items.forEach(([label, value], index) => {
+        const column = index % columns;
+        const rowStart = column === 0;
+
+        if (rowStart) addPageIfNeeded(cellHeight + 4);
+
+        const x = margin + column * (cellWidth + gap);
+        const y = cursorY;
+
+        pdf.setFillColor(soft[0], soft[1], soft[2]);
+        pdf.setDrawColor(border[0], border[1], border[2]);
+        pdf.roundedRect(x, y, cellWidth, cellHeight, 2, 2, "FD");
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(7);
+        setColor(muted);
+        pdf.text(label.toUpperCase(), x + 4, y + 6);
+        pdf.setFontSize(10);
+        setColor(slate);
+        pdf.text(
+          pdf.splitTextToSize(value || "-", cellWidth - 8),
+          x + 4,
+          y + 13
+        );
+
+        if (column === columns - 1 || index === items.length - 1) {
+          cursorY += cellHeight + 4;
+        }
+      });
+    }
+
+    function emptyState(text: string) {
+      addPageIfNeeded(18);
+      pdf.setFillColor(248, 250, 252);
+      pdf.setDrawColor(border[0], border[1], border[2]);
+      pdf.roundedRect(margin, cursorY, contentWidth, 15, 2, 2, "FD");
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(9);
+      setColor(muted);
+      pdf.text(text, margin + 5, cursorY + 9);
+      cursorY += 20;
+    }
+
+    function noteBlock(text: string) {
+      const lines = pdf.splitTextToSize(text || "-", contentWidth - 10);
+      const height = Math.max(18, lines.length * 4.8 + 12);
+
+      addPageIfNeeded(height + 5);
+      pdf.setFillColor(248, 250, 252);
+      pdf.setDrawColor(border[0], border[1], border[2]);
+      pdf.roundedRect(margin, cursorY, contentWidth, height, 2, 2, "FD");
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(8);
+      setColor(muted);
+      pdf.text("OBSERVACIONES", margin + 5, cursorY + 7);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(9);
+      setColor(slate);
+      pdf.text(lines, margin + 5, cursorY + 14);
+      cursorY += height + 4;
+    }
+
+    pdf.setFillColor(245, 247, 255);
+    pdf.rect(0, 0, pageWidth, 54, "F");
+    pdf.setFillColor(indigo[0], indigo[1], indigo[2]);
+    pdf.roundedRect(margin, 18, 22, 22, 5, 5, "F");
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(13);
+    pdf.setTextColor(255, 255, 255);
+    pdf.text("Q", margin + 8, 32);
+    pdf.setFontSize(10);
+    setColor(indigo);
+    pdf.text("QUIRON", margin + 28, 24);
+    pdf.setFontSize(22);
+    setColor(slate);
+    pdf.text("Informe clinico academico", margin + 28, 34);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(9);
+    setColor(muted);
+    pdf.text(
+      `Emitido ${new Date().toLocaleDateString("es-CL")}`,
+      margin + 28,
+      42
+    );
+    cursorY = 66;
+
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(18);
+    setColor(slate);
+    pdf.text(student.name, margin, cursorY);
+    pdf.setFillColor(indigo[0], indigo[1], indigo[2]);
+    pdf.roundedRect(pageWidth - margin - 34, cursorY - 9, 34, 14, 3, 3, "F");
+    pdf.setFontSize(13);
+    pdf.setTextColor(255, 255, 255);
+    pdf.text(student.average || "-", pageWidth - margin - 17, cursorY, {
+      align: "center",
     });
+    cursorY += 8;
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(9);
+    setColor(muted);
+    pdf.text(
+      `${academicStatus.label} · ${student.university || "Sin universidad"}`,
+      margin,
+      cursorY
+    );
+    cursorY += 12;
 
-    addText(student.name, {
-      size: 15,
-      style: "bold",
-      gap: 8,
-    });
-
-    addDivider();
-
-    addText("Información del alumno", {
-      size: 13,
-      style: "bold",
-      gap: 6,
-    });
-
-    [
-      ["Universidad", student.university],
+    sectionTitle("Informacion del alumno");
+    infoGrid([
+      ["Universidad", student.university || "-"],
       ["Correo", student.email || "-"],
       ["Carrera", student.career || "Sin definir"],
-      ["Áreas", studentAreas(student).join(", ") || "Sin área"],
+      ["Areas", studentAreas(student).join(", ") || "Sin area"],
       ["Rol", student.role || "-"],
-      ["Modalidad", student.modality || "-"],
-      ["Estado académico", getAcademicStatus(student.average).label],
+      ["Modalidad base", student.modality || "-"],
       ["Tutor", studentTutorLabel(student) || "-"],
       ["Promedio", student.average || "-"],
-    ].forEach(([label, value]) => {
-      addText(`${label}: ${value}`, {
-        size: 10,
-        gap: 4,
-      });
-    });
-
-    addText(
-      `Observaciones generales: ${
-        student.observations ||
-        "Sin observaciones registradas"
-      }`,
-      {
-        size: 10,
-        gap: 8,
-      }
+    ]);
+    noteBlock(
+      student.observations ||
+        "Sin observaciones generales registradas."
     );
 
-    addDivider();
-
-    addText("Evaluaciones", {
-      size: 13,
-      style: "bold",
-      gap: 6,
-    });
-
-    if (evaluations.length === 0) {
-      addText("Sin evaluaciones registradas.", {
-        color: [100, 116, 139],
+    sectionTitle("Rotaciones");
+    if (validRotations(student).length === 0) {
+      emptyState("Sin rotaciones registradas.");
+    } else {
+      validRotations(student).forEach((rotation) => {
+        infoGrid([
+          ["Area", rotation.area || "-"],
+          ["Modalidad", rotation.modality || student.modality || "-"],
+          ["Inicio", formatRotationDate(rotation.startDate)],
+          ["Fin", formatRotationDate(rotation.endDate)],
+          ["Sala", rotation.room || "-"],
+          ["Aviso alumno", rotation.studentNotice || "-"],
+        ]);
       });
     }
 
-    evaluations.forEach(
-      (evaluation, index) => {
-
-        addPageIfNeeded(34);
-
-        addText(
-          `${index + 1}. ${
-            evaluation.title ||
-            "Evaluación sin título"
-          }`,
-          {
-            size: 11,
-            style: "bold",
-            gap: 5,
-          }
+    sectionTitle("Asistencia");
+    infoGrid([
+      ["Registros", String(attendanceSummary.total)],
+      ["Asistencias", String(attendanceSummary.present)],
+      ["Inasistencias", String(attendanceSummary.absent)],
+      ["Recuperaciones pendientes", String(attendanceSummary.pendingRecovery)],
+    ]);
+    if (attendanceRecords.length === 0) {
+      emptyState("Sin asistencia registrada.");
+    } else {
+      attendanceRecords.slice(0, 8).forEach((record) => {
+        addPageIfNeeded(18);
+        pdf.setFillColor(255, 255, 255);
+        pdf.setDrawColor(border[0], border[1], border[2]);
+        pdf.roundedRect(margin, cursorY, contentWidth, 16, 2, 2, "FD");
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(9);
+        setColor(record.status === "present" ? [4, 120, 87] : [190, 18, 60]);
+        pdf.text(
+          record.status ? attendanceStatusLabels[record.status] : "-",
+          margin + 4,
+          cursorY + 6
         );
+        pdf.setFont("helvetica", "normal");
+        setColor(slate);
+        pdf.text(
+          `${record.area || "Sin area"} · ${record.modality || student.modality || "Diurno"}`,
+          margin + 4,
+          cursorY + 12
+        );
+        setColor(muted);
+        pdf.text(
+          formatRotationDate(record.date),
+          pageWidth - margin - 4,
+          cursorY + 8,
+          { align: "right" }
+        );
+        cursorY += 20;
+      });
+    }
 
-        addText(`Nota: ${evaluation.score || "-"}`, {
-          size: 10,
-          gap: 4,
+    sectionTitle("Evaluaciones");
+    if (evaluations.length === 0) {
+      emptyState("Sin evaluaciones registradas.");
+    }
+
+    evaluations.forEach((evaluation, index) => {
+      const commentLines = pdf.splitTextToSize(
+        evaluation.description || "Sin comentarios",
+        contentWidth - 12
+      );
+      const responseCount = evaluation.rubricResponses?.length || 0;
+      const cardHeight = Math.max(
+        36,
+        33 + commentLines.length * 4.2 + Math.min(responseCount, 8) * 4
+      );
+
+      addPageIfNeeded(cardHeight + 8);
+      pdf.setFillColor(255, 255, 255);
+      pdf.setDrawColor(border[0], border[1], border[2]);
+      pdf.roundedRect(margin, cursorY, contentWidth, cardHeight, 3, 3, "FD");
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(11);
+      setColor(slate);
+      pdf.text(
+        `${index + 1}. ${evaluation.title || "Evaluacion sin titulo"}`,
+        margin + 5,
+        cursorY + 8
+      );
+      pdf.setFillColor(238, 242, 255);
+      pdf.roundedRect(pageWidth - margin - 24, cursorY + 4, 18, 10, 2, 2, "F");
+      pdf.setFontSize(11);
+      setColor(indigo);
+      pdf.text(evaluation.score || "-", pageWidth - margin - 15, cursorY + 11, {
+        align: "center",
+      });
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8.5);
+      setColor(muted);
+      pdf.text(
+        `${formatEvaluationDate(evaluation.createdAt)} · ${
+          evaluation.createdBy || "Usuario"
+        }`,
+        margin + 5,
+        cursorY + 15
+      );
+      if (evaluation.rubricName) {
+        pdf.text(`Pauta: ${evaluation.rubricName}`, margin + 5, cursorY + 21);
+      }
+      pdf.setFontSize(9);
+      setColor(slate);
+      pdf.text(commentLines, margin + 5, cursorY + 28);
+
+      let responseY = cursorY + 31 + commentLines.length * 4.2;
+      if (evaluation.rubricResponses && evaluation.rubricResponses.length > 0) {
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(8.5);
+        setColor(slate);
+        pdf.text("Respuestas principales", margin + 5, responseY);
+        responseY += 4;
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(8);
+        setColor(muted);
+        evaluation.rubricResponses.slice(0, 8).forEach((response) => {
+          pdf.text(
+            pdf.splitTextToSize(
+              `${response.dimension}: ${response.criterion} · ${response.label} (${response.score})`,
+              contentWidth - 12
+            ),
+            margin + 5,
+            responseY
+          );
+          responseY += 4;
         });
 
-        addText(
-          `Fecha: ${formatEvaluationDate(
-            evaluation.createdAt
-          )}`,
-          {
-            size: 10,
-            gap: 4,
-          }
-        );
-
-        addText(
-          `Registrada por: ${
-            evaluation.createdBy || "Usuario"
-          }`,
-          {
-            size: 10,
-            gap: 4,
-          }
-        );
-
-        if (evaluation.rubricName) {
-          addText(
-            `Pauta: ${evaluation.rubricName}`,
-            {
-              size: 10,
-              gap: 4,
-            }
+        if (evaluation.rubricResponses.length > 8) {
+          pdf.text(
+            `+ ${evaluation.rubricResponses.length - 8} respuestas adicionales`,
+            margin + 5,
+            responseY
           );
         }
-
-        addText(
-          `Comentarios: ${
-            evaluation.description ||
-            "Sin comentarios"
-          }`,
-          {
-            size: 10,
-            gap: 4,
-          }
-        );
-
-        if (evaluation.rubricLink) {
-          addText(
-            `Rúbrica: ${evaluation.rubricLink}`,
-            {
-              size: 10,
-              color: [79, 70, 229],
-              gap: 4,
-            }
-          );
-        }
-
-        if (
-          evaluation.rubricResponses &&
-          evaluation.rubricResponses.length > 0
-        ) {
-          addText("Respuestas de pauta:", {
-            size: 10,
-            style: "bold",
-            gap: 4,
-          });
-
-          evaluation.rubricResponses.forEach(
-            (response) => {
-              addText(
-                `${response.dimension} - ${response.criterion}: ${response.label} (${response.score})`,
-                {
-                  size: 9,
-                  gap: 3,
-                }
-              );
-            }
-          );
-        }
-
-        if (index < evaluations.length - 1) {
-          cursorY += 3;
-          addDivider();
-        }
-
       }
-    );
+
+      if (evaluation.rubricLink) {
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(8);
+        setColor(indigo);
+        pdf.textWithLink(
+          "Ver rubrica enlazada",
+          margin + 5,
+          cursorY + cardHeight - 5,
+          { url: evaluation.rubricLink }
+        );
+      }
+
+      cursorY += cardHeight + 6;
+    });
+
+    addPageDecor();
 
     pdf.save(
       `informe-${fileSafeName(
