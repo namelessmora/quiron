@@ -16,11 +16,15 @@ export const academicStatusOptions = [
   "Aprobado",
   "Crítico",
   "Reprobado",
-  "Sin promedio",
+  "Sin evaluación",
 ];
 
 export function parseAverage(value?: string | number | null) {
-  const numericAverage = Number(String(value ?? "").replace(",", "."));
+  const cleanValue = String(value ?? "").trim().replace(",", ".");
+
+  if (!cleanValue) return null;
+
+  const numericAverage = Number(cleanValue);
 
   return Number.isFinite(numericAverage) ? numericAverage : null;
 }
@@ -31,9 +35,9 @@ export function getAcademicStatus(value?: string | number | null): AcademicStatu
   if (average === null) {
     return {
       key: "ungraded",
-      label: "Sin promedio",
-      pluralLabel: "Sin promedio",
-      helper: "Sin evaluaciones suficientes",
+      label: "Sin evaluación",
+      pluralLabel: "Sin evaluación",
+      helper: "Sin evaluaciones registradas",
       color: "#94a3b8",
       dotColor: "bg-slate-400",
       textColor: "text-slate-500",

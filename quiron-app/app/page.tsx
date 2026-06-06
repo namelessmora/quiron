@@ -363,7 +363,7 @@ export default function DashboardPage() {
                   Estado académico
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Distribución de alumnos según su promedio actual.
+                  Distribución de alumnos con evaluaciones registradas.
                 </p>
               </div>
               <span className="w-fit rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600">
@@ -392,7 +392,7 @@ export default function DashboardPage() {
                         {loading ? "..." : gradedStudentsCount}
                       </p>
                       <p className="mt-1 text-xs font-medium text-slate-400">
-                        alumnos con promedio
+                        alumnos evaluados
                       </p>
                     </div>
                   </div>
@@ -400,7 +400,7 @@ export default function DashboardPage() {
 
                 {!loading && ungradedCount > 0 && (
                   <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-center text-sm font-medium text-slate-500">
-                    {ungradedCount} sin promedio registrado
+                    {ungradedCount} sin evaluación registrada
                   </p>
                 )}
               </div>

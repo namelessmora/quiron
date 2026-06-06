@@ -803,7 +803,7 @@ export default function StudentDetail({
     const status = getAcademicStatus(student.average);
 
     if (status.key === "ungraded") {
-      items.push("Sin promedio registrado");
+      items.push("Sin evaluación registrada");
     }
 
     if (status.key === "critical") {

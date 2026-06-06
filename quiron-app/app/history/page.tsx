@@ -354,7 +354,7 @@ export default function HistoryPage() {
           Aprobados: metrics.approved,
           Criticos: metrics.critical,
           Reprobados: metrics.failed,
-          "Sin promedio": metrics.ungraded,
+          "Sin evaluacion": metrics.ungraded,
           "Tasa aprobacion": `${metrics.approvalRate}%`,
           "Promedio general": metrics.averageGrade,
           Evaluaciones: metrics.evaluations,
