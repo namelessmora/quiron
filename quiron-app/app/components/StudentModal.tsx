@@ -8,12 +8,14 @@ import {
   careerOptions,
   modalityOptions,
   roleOptions,
+  rotationStatusOptions,
   universityOptions,
 } from "../data/studentOptions";
 import { useTeacherProfiles } from "../hooks/useTeacherProfiles";
 import { writeAuditLog } from "../lib/audit";
 import { auth, db } from "../lib/firebase";
 import { AreaRotation } from "../lib/rotations";
+import { validateStudentInput } from "../lib/studentValidation";
 import { studentTutorLabel } from "../lib/tutors";
 
 type Props = {
@@ -55,7 +57,13 @@ export default function StudentModal({ onClose, onSaved }: Props) {
 
   function updateRotation(
     area: string,
-    field: "startDate" | "endDate" | "modality" | "room" | "studentNotice",
+    field:
+      | "startDate"
+      | "endDate"
+      | "modality"
+      | "status"
+      | "room"
+      | "studentNotice",
     value: string
   ) {
     setForm((currentForm) => {
@@ -86,6 +94,10 @@ export default function StudentModal({ onClose, onSaved }: Props) {
               field === "modality"
                 ? value
                 : existingRotation?.modality || currentForm.modality || "",
+            status:
+              field === "status"
+                ? value
+                : existingRotation?.status || "Pendiente",
             room:
               field === "room"
                 ? value
@@ -119,9 +131,41 @@ export default function StudentModal({ onClose, onSaved }: Props) {
   async function handleSave() {
     const cleanName = form.name.trim();
     const cleanUniversity = form.university.trim();
+    const tutor =
+      teacherProfiles.length > 0
+        ? studentTutorLabel({
+            tutorEmails: form.tutorEmails,
+          })
+        : form.tutor.trim();
+    const rotations = form.areas.map((area) => {
+      const rotation = form.rotations.find(
+        (currentRotation) =>
+          currentRotation.area === area
+      );
 
-    if (!cleanName || !cleanUniversity || form.areas.length === 0) {
-      setError("Nombre, universidad y al menos un área son obligatorios.");
+      return {
+        area,
+        startDate: rotation?.startDate || "",
+        endDate: rotation?.endDate || "",
+        modality: rotation?.modality || form.modality || "",
+        status: rotation?.status || "Pendiente",
+        room: rotation?.room || "",
+        studentNotice: rotation?.studentNotice || "",
+      };
+    });
+    const validationErrors = validateStudentInput({
+      name: cleanName,
+      university: cleanUniversity,
+      areas: form.areas,
+      rotations,
+      role: form.role,
+      modality: form.modality,
+      tutor,
+      tutorEmails: form.tutorEmails,
+    });
+
+    if (validationErrors.length > 0) {
+      setError(validationErrors.join(" "));
       return;
     }
 
@@ -136,30 +180,11 @@ export default function StudentModal({ onClose, onSaved }: Props) {
         career: form.career.trim(),
         areas: form.areas,
         area: form.areas[0],
-        rotations: form.areas.map((area) => {
-          const rotation = form.rotations.find(
-            (currentRotation) =>
-              currentRotation.area === area
-          );
-
-          return {
-            area,
-            startDate: rotation?.startDate || "",
-            endDate: rotation?.endDate || "",
-            modality: rotation?.modality || form.modality || "",
-            room: rotation?.room || "",
-            studentNotice: rotation?.studentNotice || "",
-          };
-        }),
+        rotations,
         role: form.role,
         modality: form.modality,
         tutorEmails: form.tutorEmails,
-        tutor:
-          teacherProfiles.length > 0
-            ? studentTutorLabel({
-                tutorEmails: form.tutorEmails,
-              })
-            : form.tutor.trim(),
+        tutor,
         status: "Activo",
       });
 
@@ -383,7 +408,7 @@ export default function StudentModal({ onClose, onSaved }: Props) {
                   return (
                     <div
                       key={area}
-                      className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[80px_1fr_1fr] sm:items-center lg:grid-cols-[80px_1fr_1fr_1fr_1fr]"
+                      className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[80px_1fr_1fr] sm:items-center lg:grid-cols-[80px_1fr_1fr_1fr_1fr_1fr]"
                     >
                       <p className="font-semibold text-slate-700">
                         {area}
@@ -444,6 +469,27 @@ export default function StudentModal({ onClose, onSaved }: Props) {
                       </label>
 
                       <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        Estado
+                        <select
+                          value={rotation?.status || "Pendiente"}
+                          onChange={(event) =>
+                            updateRotation(
+                              area,
+                              "status",
+                              event.target.value
+                            )
+                          }
+                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700"
+                        >
+                          {rotationStatusOptions.map((status) => (
+                            <option key={status} value={status}>
+                              {status}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
                         Sala/unidad
                         <input
                           type="text"
@@ -460,7 +506,7 @@ export default function StudentModal({ onClose, onSaved }: Props) {
                         />
                       </label>
 
-                      <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:col-span-3 lg:col-span-5">
+                      <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:col-span-3 lg:col-span-6">
                         Aviso para alumno
                         <input
                           type="text"

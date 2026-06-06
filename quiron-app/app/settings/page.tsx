@@ -16,6 +16,11 @@ import { UserRole } from "../data/userRoles";
 import { useCurrentUserPermissions } from "../hooks/useCurrentUserPermissions";
 import { writeAuditLog } from "../lib/audit";
 import { db } from "../lib/firebase";
+import {
+  isStudentFinalized,
+  parseLocalDate,
+  validRotations,
+} from "../lib/rotations";
 import { normalizeEmail, userRoleLabel } from "../lib/userRoles";
 
 type AccessUser = {
@@ -32,6 +37,31 @@ type AuditLog = {
   targetType?: string;
   targetName?: string;
   createdAt?: Timestamp | { seconds?: number };
+};
+
+type HealthStudent = {
+  id: string;
+  name?: string;
+  email?: string;
+  areas?: string[];
+  area?: string;
+  tutor?: string;
+  tutorEmails?: string[];
+  rotations?: Array<{
+    area: string;
+    startDate?: string;
+    endDate?: string;
+    modality?: string;
+    status?: string;
+  }>;
+};
+
+type HealthAttendance = {
+  id: string;
+  studentId?: string;
+  studentName?: string;
+  status?: string;
+  recoveryStatus?: string;
 };
 
 function auditDate(value: AuditLog["createdAt"]) {
@@ -53,6 +83,8 @@ export default function SettingsPage() {
     useState<AccessUser[]>([]);
   const [auditLogs, setAuditLogs] =
     useState<AuditLog[]>([]);
+  const [healthItems, setHealthItems] =
+    useState<string[]>([]);
   const [email, setEmail] =
     useState("");
   const [name, setName] =
@@ -100,9 +132,38 @@ export default function SettingsPage() {
           id: auditDoc.id,
           ...(auditDoc.data() as Omit<AuditLog, "id">),
         }));
+      const studentsSnapshot =
+        await getDocs(collection(db, "students"));
+      const students = studentsSnapshot.docs.map((studentDoc) => ({
+        id: studentDoc.id,
+        ...(studentDoc.data() as Omit<HealthStudent, "id">),
+      }));
+      const attendanceSnapshot =
+        await getDocs(collection(db, "attendance"));
+      const attendanceRecords = attendanceSnapshot.docs.map((attendanceDoc) => ({
+        id: attendanceDoc.id,
+        ...(attendanceDoc.data() as Omit<HealthAttendance, "id">),
+      }));
+      const today = new Date();
+      const todayStart = new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate()
+      );
+      const nextHealthItems = [
+        `${students.filter((student) => !student.tutor && (student.tutorEmails || []).length === 0).length} alumnos sin tutor`,
+        `${students.filter((student) => validRotations(student).length === 0).length} alumnos sin rotaciones`,
+        `${students.filter((student) => validRotations(student).some((rotation) => !rotation.startDate || !rotation.endDate)).length} alumnos con fechas incompletas`,
+        `${students.filter((student) => !isStudentFinalized(student) && validRotations(student).some((rotation) => {
+          const endDate = parseLocalDate(rotation.endDate);
+          return endDate && endDate < todayStart && rotation.status !== "Finalizada";
+        })).length} alumnos con rotaciones vencidas sin finalizar`,
+        `${attendanceRecords.filter((record) => record.status === "absent" && (record.recoveryStatus === "pending" || record.recoveryStatus === "later")).length} inasistencias con recuperación pendiente`,
+      ];
 
       setAccessUsers(nextAccessUsers);
       setAuditLogs(nextAuditLogs);
+      setHealthItems(nextHealthItems);
     } catch (loadError) {
       console.error(loadError);
       setError("No se pudo cargar la configuración.");
@@ -193,6 +254,13 @@ export default function SettingsPage() {
     await loadSettings();
   }
 
+  async function copyInvitation(accessUser: AccessUser) {
+    const appUrl = "https://quiron-sigma.vercel.app";
+    const text = `Hola ${accessUser.name || ""}. Tu acceso a Quirón está habilitado como ${userRoleLabel(accessUser.role)} para el correo ${accessUser.email}. Ingresa con Google en ${appUrl}`;
+
+    await navigator.clipboard.writeText(text);
+  }
+
   if (!canManageSettings) {
     return (
       <div className="mx-auto w-full max-w-3xl px-6 py-10">
@@ -265,6 +333,37 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      <section className="mb-8 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900">
+              Salud del sistema
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Checklist rápido para detectar datos incompletos o pendientes.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadSettings()}
+            className="w-fit rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Recalcular
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          {healthItems.map((item) => (
+            <div
+              key={item}
+              className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800"
+            >
+              {item}
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className="mb-8 grid gap-4 lg:grid-cols-3">
         {(["admin", "teacher", "student"] as UserRole[]).map((userRole) => (
           <article
@@ -298,6 +397,13 @@ export default function SettingsPage() {
                     className="mt-2 text-sm font-semibold text-red-600"
                   >
                     Eliminar acceso
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void copyInvitation(accessUser)}
+                    className="ml-3 mt-2 text-sm font-semibold text-indigo-600"
+                  >
+                    Copiar invitación
                   </button>
                 </div>
               ))}

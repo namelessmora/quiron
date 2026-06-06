@@ -26,3 +26,10 @@ export const modalityOptions = [
   "Diurno",
   "4to Modificado",
 ];
+
+export const rotationStatusOptions = [
+  "Pendiente",
+  "En curso",
+  "Finalizada",
+  "Extendida por recuperación",
+];

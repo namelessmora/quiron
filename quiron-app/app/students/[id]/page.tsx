@@ -30,15 +30,18 @@ import {
   careerOptions,
   modalityOptions,
   roleOptions,
+  rotationStatusOptions,
   universityOptions,
 } from "../../data/studentOptions";
 import { getAcademicStatus } from "../../lib/academicStatus";
 import {
   AreaRotation,
   formatRotationDate,
+  rotationStatus,
   validStudentAreas,
   validRotations,
 } from "../../lib/rotations";
+import { validateStudentInput } from "../../lib/studentValidation";
 import {
   canUserAccessStudent,
   canUserEvaluateStudent,
@@ -526,6 +529,7 @@ export default function StudentDetail({
       | "startDate"
       | "endDate"
       | "modality"
+      | "status"
       | "room"
       | "studentNotice",
     value: string
@@ -556,6 +560,10 @@ export default function StudentDetail({
             field === "modality"
               ? value
               : existingRotation?.modality || editModality || "",
+          status:
+            field === "status"
+              ? value
+              : existingRotation?.status || "Pendiente",
           room:
             field === "room"
               ? value
@@ -1263,6 +1271,7 @@ export default function StudentDetail({
           startDate: rotation?.startDate || "",
           endDate: rotation?.endDate || "",
           modality: rotation?.modality || editModality || "",
+          status: rotation?.status || "Pendiente",
           room: rotation?.room || "",
           studentNotice: rotation?.studentNotice || "",
         };
@@ -1273,6 +1282,37 @@ export default function StudentDetail({
               tutorEmails: editTutorEmails,
             })
           : editTutor;
+      const validationErrors = validateStudentInput({
+        name: editName,
+        university: editUniversity,
+        areas: editAreas,
+        rotations: nextRotations,
+        role: editRole,
+        modality: editModality,
+        tutor: nextTutor,
+        tutorEmails: editTutorEmails,
+      });
+
+      if (validationErrors.length > 0) {
+        alert(validationErrors.join(" "));
+        return;
+      }
+
+      const changedFields = [
+        student.name !== editName ? "nombre" : "",
+        student.email !== editEmail.trim().toLowerCase() ? "correo" : "",
+        student.university !== editUniversity ? "universidad" : "",
+        student.career !== editCareer ? "carrera" : "",
+        (student.areas || []).join(",") !== editAreas.join(",")
+          ? "áreas"
+          : "",
+        student.modality !== editModality ? "modalidad" : "",
+        studentTutorLabel(student) !== nextTutor ? "tutor" : "",
+        JSON.stringify(student.rotations || []) !==
+        JSON.stringify(nextRotations)
+          ? "rotaciones"
+          : "",
+      ].filter(Boolean);
 
       await updateDoc(
         doc(db, "students", student.id),
@@ -1302,6 +1342,7 @@ export default function StudentDetail({
           university: editUniversity,
           areas: editAreas.join(", "),
           tutor: nextTutor,
+          changedFields: changedFields.join(", ") || "sin cambios críticos",
         },
       });
 
@@ -1594,6 +1635,7 @@ export default function StudentDetail({
         infoGrid([
           ["Area", rotation.area || "-"],
           ["Modalidad", rotation.modality || student.modality || "-"],
+          ["Estado", rotationStatus(rotation)],
           ["Inicio", formatRotationDate(rotation.startDate)],
           ["Fin", formatRotationDate(rotation.endDate)],
           ["Sala", rotation.room || "-"],
@@ -1817,6 +1859,26 @@ export default function StudentDetail({
       }
     });
 
+    sectionTitle("Resumen final");
+    infoGrid([
+      ["Promedio", student.average || "-"],
+      ["Evaluaciones", String(evaluations.length)],
+      ["Asistencias", String(attendanceSummary.present)],
+      ["Inasistencias", String(attendanceSummary.absent)],
+      ["Recuperaciones pendientes", String(attendanceSummary.pendingRecovery)],
+      ["Fecha de emisión", new Date().toLocaleDateString("es-CL")],
+    ]);
+    addPageIfNeeded(28);
+    cursorY += 8;
+    pdf.setDrawColor(border[0], border[1], border[2]);
+    pdf.line(margin, cursorY, margin + 70, cursorY);
+    pdf.line(pageWidth - margin - 70, cursorY, pageWidth - margin, cursorY);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8.5);
+    setColor(muted);
+    pdf.text("Firma tutor docente", margin, cursorY + 6);
+    pdf.text("Firma coordinación clínica", pageWidth - margin - 70, cursorY + 6);
+
     addPageDecor();
 
     pdf.save(
@@ -2015,6 +2077,12 @@ export default function StudentDetail({
                     Modalidad:{" "}
                     <span className="font-semibold text-slate-700">
                       {rotation.modality || student.modality || "-"}
+                    </span>
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Estado:{" "}
+                    <span className="font-semibold text-slate-700">
+                      {rotationStatus(rotation)}
                     </span>
                   </p>
                   {(rotation.room || rotation.studentNotice) && (
@@ -2863,7 +2931,7 @@ export default function StudentDetail({
                       return (
                         <div
                           key={area}
-                          className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[80px_1fr_1fr] sm:items-center lg:grid-cols-[80px_1fr_1fr_1fr_1fr]"
+                          className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[80px_1fr_1fr] sm:items-center lg:grid-cols-[80px_1fr_1fr_1fr_1fr_1fr]"
                         >
                           <p className="font-semibold text-slate-700">
                             {area}
@@ -2930,6 +2998,30 @@ export default function StudentDetail({
                           </label>
 
                           <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                            Estado
+                            <select
+                              value={rotation?.status || "Pendiente"}
+                              onChange={(event) =>
+                                updateEditRotation(
+                                  area,
+                                  "status",
+                                  event.target.value
+                                )
+                              }
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700"
+                            >
+                              {rotationStatusOptions.map((status) => (
+                                <option
+                                  key={status}
+                                  value={status}
+                                >
+                                  {status}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
+                          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
                             Sala/unidad
                             <input
                               type="text"
@@ -2946,7 +3038,7 @@ export default function StudentDetail({
                             />
                           </label>
 
-                          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:col-span-3 lg:col-span-5">
+                          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:col-span-3 lg:col-span-6">
                             Aviso para alumno
                             <input
                               type="text"

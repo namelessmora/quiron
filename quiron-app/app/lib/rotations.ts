@@ -1,10 +1,17 @@
 import { areaOptions } from "../data/studentOptions";
 
+export type RotationStatus =
+  | "Pendiente"
+  | "En curso"
+  | "Finalizada"
+  | "Extendida por recuperación";
+
 export type AreaRotation = {
   area: string;
   startDate?: string;
   endDate?: string;
   modality?: string;
+  status?: RotationStatus | string;
   room?: string;
   studentNotice?: string;
 };
@@ -73,4 +80,23 @@ export function formatRotationDate(value?: string) {
     month: "2-digit",
     year: "numeric",
   });
+}
+
+export function rotationStatus(rotation: AreaRotation) {
+  if (rotation.status) return rotation.status;
+
+  const startDate = parseLocalDate(rotation.startDate);
+  const endDate = parseLocalDate(rotation.endDate);
+  const today = new Date();
+  const todayStart = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  );
+
+  if (!startDate || !endDate) return "Pendiente";
+  if (todayStart < startDate) return "Pendiente";
+  if (todayStart > endDate) return "Finalizada";
+
+  return "En curso";
 }

@@ -4,8 +4,12 @@ import { useState } from "react";
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
+  getDocs,
+  query,
   setDoc,
+  where,
 } from "firebase/firestore";
 
 import { useCurrentUserPermissions } from "../../hooks/useCurrentUserPermissions";
@@ -82,6 +86,7 @@ export default function SeedDemoPage() {
             startDate: iso(startDate),
             endDate: iso(endDate),
             modality: "Diurno",
+            status: "En curso",
             room: "Sala TC 2",
             studentNotice:
               "Presentarse en sala TC 2 a las 08:00 con credencial.",
@@ -123,6 +128,78 @@ export default function SeedDemoPage() {
     }
   }
 
+  async function clearDemoData() {
+    if (role !== "admin") return;
+
+    try {
+      setLoading(true);
+      setMessage("");
+
+      await Promise.all(
+        demoUsers.map((demoUser) =>
+          deleteDoc(doc(db, "userAccess", demoUser.email))
+        )
+      );
+
+      const studentSnapshot = await getDocs(
+        query(
+          collection(db, "students"),
+          where("email", "==", "alumno.demo@quiron.cl")
+        )
+      );
+
+      await Promise.all(
+        studentSnapshot.docs.map(async (studentDoc) => {
+          const evaluationsSnapshot = await getDocs(
+            collection(db, "students", studentDoc.id, "evaluations")
+          );
+
+          await Promise.all(
+            evaluationsSnapshot.docs.map((evaluationDoc) =>
+              deleteDoc(
+                doc(
+                  db,
+                  "students",
+                  studentDoc.id,
+                  "evaluations",
+                  evaluationDoc.id
+                )
+              )
+            )
+          );
+          await deleteDoc(doc(db, "students", studentDoc.id));
+        })
+      );
+
+      const attendanceSnapshot = await getDocs(
+        query(
+          collection(db, "attendance"),
+          where("studentEmail", "==", "alumno.demo@quiron.cl")
+        )
+      );
+
+      await Promise.all(
+        attendanceSnapshot.docs.map((attendanceDoc) =>
+          deleteDoc(doc(db, "attendance", attendanceDoc.id))
+        )
+      );
+
+      await writeAuditLog({
+        action: "demo.cleared",
+        actorEmail: user?.email,
+        targetType: "demo",
+        targetName: "Datos demo",
+      });
+
+      setMessage("Datos demo eliminados.");
+    } catch (error) {
+      console.error(error);
+      setMessage("No se pudieron limpiar los datos demo.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   if (role !== "admin") {
     return (
       <div className="mx-auto w-full max-w-3xl px-6 py-10">
@@ -154,6 +231,14 @@ export default function SeedDemoPage() {
           className="mt-6 rounded-lg bg-indigo-600 px-5 py-3 font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-60"
         >
           {loading ? "Creando..." : "Crear datos demo"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void clearDemoData()}
+          disabled={loading}
+          className="ml-3 mt-6 rounded-lg border border-rose-100 bg-rose-50 px-5 py-3 font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-60"
+        >
+          Limpiar datos demo
         </button>
 
         {message && (

@@ -134,6 +134,7 @@ function mergeRotations(
       startDate: rotation.startDate || previous?.startDate || "",
       endDate: rotation.endDate || previous?.endDate || "",
       modality: rotation.modality || previous?.modality || "",
+      status: rotation.status || previous?.status || "Pendiente",
       room: rotation.room || previous?.room || "",
       studentNotice:
         rotation.studentNotice || previous?.studentNotice || "",
@@ -287,6 +288,7 @@ export default function ImportPage() {
               startDate,
               endDate,
               modality,
+              status: startDate ? "Pendiente" : "Pendiente",
               room,
               studentNotice,
             }

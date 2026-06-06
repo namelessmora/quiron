@@ -701,6 +701,7 @@ export default function AttendancePage() {
             ? {
                 ...rotation,
                 endDate: record.recoveryDate,
+                status: "Extendida por recuperación",
               }
             : rotation
         );
