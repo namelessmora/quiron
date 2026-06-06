@@ -47,6 +47,11 @@ export default function AuthGuard({
           if (
             pathname === "/login"
           ) {
+            if (user) {
+              router.replace(
+                "/"
+              );
+            }
 
             setLoading(false);
 
