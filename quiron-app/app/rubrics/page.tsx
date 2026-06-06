@@ -9,6 +9,7 @@ import {
   doc,
   serverTimestamp,
 } from "firebase/firestore";
+import * as XLSX from "xlsx";
 
 import {
   Rubric,
@@ -107,6 +108,53 @@ function slug(value: string) {
     .replace(/^-|-$/g, "");
 }
 
+function cleanCriterionText(value: string) {
+  return value
+    .replace(/^\s*[\d.-]+\s*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function criteriaFromLines(
+  lines: string[],
+  fallbackDimension = "Criterios importados"
+) {
+  let currentDimension = fallbackDimension;
+  const nextCriteria: CriterionDraft[] = [];
+
+  lines
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .forEach((line) => {
+      const [firstCell, ...rest] = line
+        .split(/\t|;/)
+        .map((cell) => cell.trim())
+        .filter(Boolean);
+      const candidateText = rest.length > 0 ? rest.join(" ") : firstCell;
+      const cleanText = cleanCriterionText(candidateText || line);
+
+      if (!cleanText || cleanText.length < 8) return;
+
+      const looksLikeDimension =
+        cleanText.length <= 60 &&
+        !cleanText.endsWith(".") &&
+        nextCriteria.length > 0;
+
+      if (looksLikeDimension && rest.length === 0) {
+        currentDimension = cleanText;
+        return;
+      }
+
+      nextCriteria.push({
+        id: `${slug(currentDimension)}-${nextCriteria.length + 1}-${Date.now()}`,
+        dimension: currentDimension,
+        title: cleanText,
+      });
+    });
+
+  return nextCriteria;
+}
+
 export default function RubricsPage() {
   const { permissions } = useCurrentUserPermissions();
   const [storedRubrics, setStoredRubrics] = useState<StoredRubric[]>([]);
@@ -189,6 +237,68 @@ export default function RubricsPage() {
     setCriteria((current) =>
       current.filter((criterion) => criterion.id !== id)
     );
+  }
+
+  async function importRubricFile(file?: File) {
+    if (!file) return;
+
+    setError("");
+    setSuccess("");
+
+    const extension = file.name.split(".").pop()?.toLowerCase() || "";
+
+    try {
+      let importedCriteria: CriterionDraft[] = [];
+
+      if (extension === "xlsx" || extension === "xls") {
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, {
+          type: "array",
+        });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json<string[]>(worksheet, {
+          header: 1,
+          blankrows: false,
+        });
+
+        importedCriteria = criteriaFromLines(
+          rows.map((row) => row.join(";")),
+          "Criterios importados"
+        );
+      } else if (extension === "csv" || extension === "txt") {
+        const text = await file.text();
+
+        importedCriteria = criteriaFromLines(
+          text.split(/\r?\n/),
+          "Criterios importados"
+        );
+      } else {
+        setError(
+          "Por ahora el cargador convierte Excel, CSV o TXT. Si te envían PDF o Word, copia los criterios al cuadro manual o pásalo antes a Excel/CSV."
+        );
+        return;
+      }
+
+      if (importedCriteria.length === 0) {
+        setError("No encontré criterios claros en el archivo.");
+        return;
+      }
+
+      if (!name.trim()) {
+        setName(file.name.replace(/\.[^.]+$/, ""));
+      }
+
+      setCriteria((currentCriteria) => [
+        ...currentCriteria,
+        ...importedCriteria,
+      ]);
+      setSuccess(
+        `${importedCriteria.length} criterios importados desde ${file.name}. Revísalos antes de guardar.`
+      );
+    } catch (importError) {
+      console.error(importError);
+      setError("No se pudo importar el archivo de pauta.");
+    }
   }
 
   async function saveRubric() {
@@ -299,6 +409,24 @@ export default function RubricsPage() {
               la nota.
             </p>
           </div>
+
+          <label className="mb-5 block rounded-lg border border-dashed border-indigo-200 bg-indigo-50 p-4">
+            <span className="block text-sm font-bold text-indigo-800">
+              Cargar archivo de pauta
+            </span>
+            <span className="mt-1 block text-sm text-indigo-700">
+              Convierte Excel, CSV o TXT en criterios editables antes de guardar.
+            </span>
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv,.txt"
+              onChange={(event) => {
+                void importRubricFile(event.target.files?.[0]);
+                event.target.value = "";
+              }}
+              className="mt-3 w-full rounded-lg border border-indigo-100 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-600 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white"
+            />
+          </label>
 
           <div className="grid gap-3">
             <input

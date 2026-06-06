@@ -32,6 +32,17 @@ type EvaluationSummary = {
   rubricName?: string;
 };
 
+type AttendanceRecord = {
+  id: string;
+  studentId?: string;
+  studentName?: string;
+  area?: string;
+  date?: string;
+  status?: "present" | "absent";
+  recoveryStatus?: "none" | "pending" | "accepted" | "rejected" | "later";
+  recoveryDate?: string;
+};
+
 export default function AlertsPage() {
   const { user, role } =
     useCurrentUserPermissions();
@@ -63,6 +74,40 @@ export default function AlertsPage() {
           getDocs(collection(db, "students", student.id, "evaluations"))
         )
       );
+      const attendanceSnapshot =
+        role === "admin"
+          ? await getDocs(collection(db, "attendance"))
+          : null;
+      const attendanceAlerts: ClinicalAlert[] =
+        attendanceSnapshot?.docs
+          .map((attendanceDoc) => ({
+            id: attendanceDoc.id,
+            ...(attendanceDoc.data() as Omit<AttendanceRecord, "id">),
+          }))
+          .filter(
+            (record) =>
+              record.status === "absent" &&
+              (record.recoveryStatus === "pending" ||
+                record.recoveryStatus === "later")
+          )
+          .map((record) => ({
+            id: `attendance-${record.id}`,
+            studentId: record.studentId || "",
+            studentName: record.studentName || "Alumno sin nombre",
+            audience: "admin" as const,
+            tone: "red" as const,
+            title: `Inasistencia por gestionar${
+              record.area ? ` en ${record.area}` : ""
+            }`,
+            description: `El docente registró una inasistencia${
+              record.date ? ` el ${record.date}` : ""
+            }. Administración debe coordinar la recuperación${
+              record.recoveryDate
+                ? ` sugerida para ${record.recoveryDate}`
+                : ""
+            }.`,
+            dueDate: record.recoveryDate || record.date,
+          })) || [];
 
       const nextAlerts = students.flatMap((student, index) => {
         const evaluations = evaluationSnapshots[index].docs.map(
@@ -73,7 +118,7 @@ export default function AlertsPage() {
         return buildClinicalAlerts(student, evaluations);
       });
 
-      setAlerts(nextAlerts);
+      setAlerts([...attendanceAlerts, ...nextAlerts]);
     } catch (loadError) {
       console.error(loadError);
       setError("No se pudieron cargar los avisos.");
@@ -105,6 +150,9 @@ export default function AlertsPage() {
   const studentAlertCount = visibleAlerts.filter(
     (alert) => alert.audience === "student"
   ).length;
+  const adminAlertCount = visibleAlerts.filter(
+    (alert) => alert.audience === "admin"
+  ).length;
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 lg:px-10">
@@ -131,7 +179,7 @@ export default function AlertsPage() {
         </button>
       </header>
 
-      <section className="mb-6 grid gap-4 md:grid-cols-3">
+      <section className="mb-6 grid gap-4 md:grid-cols-4">
         <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-semibold text-slate-400">
             Total
@@ -154,6 +202,14 @@ export default function AlertsPage() {
           </p>
           <p className="mt-2 text-3xl font-bold text-blue-900">
             {loading ? "-" : studentAlertCount}
+          </p>
+        </article>
+        <article className="rounded-lg border border-red-100 bg-red-50 p-5">
+          <p className="text-sm font-semibold text-red-700">
+            Administración
+          </p>
+          <p className="mt-2 text-3xl font-bold text-red-900">
+            {loading ? "-" : adminAlertCount}
           </p>
         </article>
       </section>
@@ -199,7 +255,9 @@ export default function AlertsPage() {
                     <span className="rounded-lg bg-white/70 px-3 py-1 text-xs font-bold uppercase tracking-wide">
                       {alert.audience === "student"
                         ? "Alumno"
-                        : "Docente"}
+                        : alert.audience === "admin"
+                          ? "Admin"
+                          : "Docente"}
                     </span>
                     {alert.dueDate && (
                       <span className="rounded-lg bg-white/70 px-3 py-1 text-xs font-bold">

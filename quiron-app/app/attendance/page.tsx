@@ -291,14 +291,17 @@ export default function AttendancePage() {
     useState("");
   const [notice, setNotice] =
     useState("");
+  const [recoveryDraftDates, setRecoveryDraftDates] =
+    useState<Record<string, string>>({});
 
   const selectedDateObject = useMemo(
     () => parseLocalDate(selectedDate) || new Date(),
     [selectedDate]
   );
   const userEmail = normalizeEmail(user?.email);
-  const canManageAttendance =
+  const canMarkAttendance =
     role === "admin" || role === "teacher";
+  const canManageRecovery = role === "admin";
 
   const loadAttendance = useCallback(async () => {
     try {
@@ -563,7 +566,7 @@ export default function AttendancePage() {
     status: AttendanceStatus,
     options: { refresh?: boolean; silent?: boolean } = {}
   ) {
-    if (!canManageAttendance || !user?.email) return;
+    if (!canMarkAttendance || !user?.email) return;
 
     const key = `${student.id}-${selectedDate}-${rotation.area}`;
     const existingRecord = recordsByStudentDateArea[key];
@@ -641,7 +644,9 @@ export default function AttendancePage() {
         setNotice(
           status === "present"
             ? `Asistencia guardada para ${student.name}.`
-            : `Inasistencia guardada para ${student.name}.`
+            : role === "teacher"
+              ? `Inasistencia guardada para ${student.name}. Administración verá el aviso para gestionar la recuperación.`
+              : `Inasistencia guardada para ${student.name}.`
         );
       }
       if (options.refresh !== false) {
@@ -656,7 +661,7 @@ export default function AttendancePage() {
   }
 
   async function markAllPresent() {
-    if (!canManageAttendance || unmarkedScheduled.length === 0) return;
+    if (!canMarkAttendance || unmarkedScheduled.length === 0) return;
 
     try {
       setSavingId("bulk");
@@ -684,23 +689,32 @@ export default function AttendancePage() {
 
   async function updateRecovery(
     record: AttendanceRecord,
-    recoveryStatus: RecoveryStatus
+    recoveryStatus: RecoveryStatus,
+    recoveryDate?: string
   ) {
+    if (!canManageRecovery) return;
+
     const student = students.find(
       (currentStudent) => currentStudent.id === record.studentId
     );
 
     if (!student || !record.area) return;
+    const nextRecoveryDateValue = recoveryDate || record.recoveryDate || "";
+
+    if (recoveryStatus === "accepted" && !nextRecoveryDateValue) {
+      setError("Selecciona una fecha de recuperación antes de guardarla.");
+      return;
+    }
 
     try {
       setSavingId(record.id);
 
-      if (recoveryStatus === "accepted" && record.recoveryDate) {
+      if (recoveryStatus === "accepted" && nextRecoveryDateValue) {
         const nextRotations = (student.rotations || []).map((rotation) =>
           rotation.area === record.area
             ? {
                 ...rotation,
-                endDate: record.recoveryDate,
+                endDate: nextRecoveryDateValue,
                 status: "Extendida por recuperación",
               }
             : rotation
@@ -713,6 +727,7 @@ export default function AttendancePage() {
 
       await updateDoc(doc(db, "attendance", record.id), {
         recoveryStatus,
+        recoveryDate: nextRecoveryDateValue,
       });
       await writeAuditLog({
         action: `attendance.recovery.${recoveryStatus}`,
@@ -723,7 +738,7 @@ export default function AttendancePage() {
         details: {
           studentId: record.studentId,
           area: record.area,
-          recoveryDate: record.recoveryDate,
+          recoveryDate: nextRecoveryDateValue,
         },
       });
       setNotice("Recuperación actualizada.");
@@ -830,8 +845,8 @@ export default function AttendancePage() {
             Control docente de asistencia
           </h1>
           <p className="mt-2 max-w-3xl text-base text-slate-500">
-            Registra si el alumno asistió, sugiere recuperación ante
-            inasistencia y extiende la rotación cuando el tutor acepta.
+            Docentes registran asistencia. Administración revisa inasistencias
+            y coordina recuperaciones cuando corresponde.
           </p>
         </div>
 
@@ -904,10 +919,10 @@ export default function AttendancePage() {
         </article>
         <article className="rounded-lg border border-indigo-100 bg-indigo-50 p-5">
           <p className="text-sm font-semibold text-indigo-700">
-            Recuperaciones
+            Gestión admin
           </p>
           <p className="mt-2 text-3xl font-bold text-indigo-900">
-            {pendingRecoveryRecords.length}
+            {canManageRecovery ? pendingRecoveryRecords.length : "-"}
           </p>
         </article>
         <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -921,7 +936,7 @@ export default function AttendancePage() {
       </section>
 
       {(unmarkedScheduled.length > 0 ||
-        pendingRecoveryRecords.length > 0 ||
+        (canManageRecovery && pendingRecoveryRecords.length > 0) ||
         endingSoonRotations.length > 0) && (
         <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -933,7 +948,7 @@ export default function AttendancePage() {
                 Seguimiento rápido de asistencia, recuperaciones y cierres.
               </p>
             </div>
-            {canManageAttendance && unmarkedScheduled.length > 0 && (
+            {canMarkAttendance && unmarkedScheduled.length > 0 && (
               <button
                 type="button"
                 onClick={() => void markAllPresent()}
@@ -966,7 +981,9 @@ export default function AttendancePage() {
                 Recuperación pendiente
               </p>
               <p className="mt-1 text-sm text-indigo-700">
-                {pendingRecoveryRecords.length === 0
+                {!canManageRecovery
+                  ? "Administración gestiona las recuperaciones."
+                  : pendingRecoveryRecords.length === 0
                   ? "Sin recuperaciones pendientes."
                   : pendingRecoveryRecords
                       .slice(0, 3)
@@ -1104,13 +1121,13 @@ export default function AttendancePage() {
         </div>
       </section>
 
-      {!canManageAttendance && (
+      {!canMarkAttendance && (
         <div className="mb-6 rounded-lg border border-amber-100 bg-amber-50 p-5 text-sm leading-6 text-amber-700">
           La asistencia la registra el docente tutor o administración.
         </div>
       )}
 
-      {canManageAttendance && (
+      {canMarkAttendance && (
         <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-xl font-bold text-slate-900">
             Pasar asistencia del día
@@ -1235,15 +1252,43 @@ export default function AttendancePage() {
                 )}
               </div>
 
-              {canManageAttendance && record.status === "absent" && (
-                <div className="flex flex-wrap gap-2">
+              {canManageRecovery && record.status === "absent" && (
+                <div className="grid gap-2 sm:min-w-[310px]">
+                  <label className="grid gap-1 text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Fecha de recuperación
+                    <input
+                      type="date"
+                      value={
+                        recoveryDraftDates[record.id] ??
+                        record.recoveryDate ??
+                        ""
+                      }
+                      onChange={(event) =>
+                        setRecoveryDraftDates((currentDates) => ({
+                          ...currentDates,
+                          [record.id]: event.target.value,
+                        }))
+                      }
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium normal-case tracking-normal text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                    />
+                  </label>
+
+                  <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => void updateRecovery(record, "accepted")}
+                    onClick={() =>
+                      void updateRecovery(
+                        record,
+                        "accepted",
+                        recoveryDraftDates[record.id] ??
+                          record.recoveryDate ??
+                          ""
+                      )
+                    }
                     disabled={savingId === record.id}
                     className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:opacity-60"
                   >
-                    Aceptar
+                    Guardar recuperación
                   </button>
                   <button
                     type="button"
@@ -1261,6 +1306,7 @@ export default function AttendancePage() {
                   >
                     Rechazar
                   </button>
+                  </div>
                 </div>
               )}
             </article>
