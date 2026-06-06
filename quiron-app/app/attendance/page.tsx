@@ -217,6 +217,26 @@ function rotationRoom(rotation?: AreaRotation) {
   return rotation?.room || "Sin sala";
 }
 
+function formatDateTime(
+  value: AttendanceRecord["markedAt"]
+) {
+  if (!value) return "Fecha pendiente";
+
+  if (value instanceof Timestamp) {
+    return value.toDate().toLocaleString("es-CL");
+  }
+
+  if (value instanceof Date) {
+    return value.toLocaleString("es-CL");
+  }
+
+  if ("seconds" in value && typeof value.seconds === "number") {
+    return new Date(value.seconds * 1000).toLocaleString("es-CL");
+  }
+
+  return "Fecha pendiente";
+}
+
 function recordKey(record: Pick<AttendanceRecord, "studentId" | "date" | "area">) {
   return `${record.studentId}-${record.date}-${record.area}`;
 }
@@ -727,6 +747,7 @@ export default function AttendancePage() {
         "Recuperación",
         "Fecha recuperación",
         "Registrado por",
+        "Última marca",
       ],
       ...filteredRecords.map((record) => [
         record.studentName,
@@ -738,6 +759,7 @@ export default function AttendancePage() {
         recoveryLabels[record.recoveryStatus || "none"],
         record.recoveryDate || "",
         record.markedBy || "",
+        formatDateTime(record.markedAt),
       ]),
     ];
   }
@@ -757,6 +779,7 @@ export default function AttendancePage() {
         "Recuperación",
         "Fecha recuperación",
         "Registrado por",
+        "Última marca",
       ],
       ...monthlyRecords.map((record) => {
         const student = visibleStudentMap[record.studentId];
@@ -777,6 +800,7 @@ export default function AttendancePage() {
           recoveryLabels[record.recoveryStatus || "none"],
           record.recoveryDate || "",
           record.markedBy || "",
+          formatDateTime(record.markedAt),
         ];
       }),
     ];
@@ -1196,6 +1220,9 @@ export default function AttendancePage() {
                 <p className="mt-1 text-sm text-slate-500">
                   {record.modality || "Diurno"} · Registrado por{" "}
                   {record.markedBy || "-"}
+                </p>
+                <p className="mt-1 text-xs font-semibold text-slate-400">
+                  Última marca: {formatDateTime(record.markedAt)}
                 </p>
                 {record.status === "absent" && (
                   <p className="mt-2 text-sm font-semibold text-slate-600">

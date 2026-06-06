@@ -8,6 +8,10 @@ import {
 import {
   onAuthStateChanged,
 } from "firebase/auth";
+import {
+  doc,
+  getDoc,
+} from "firebase/firestore";
 
 import {
   usePathname,
@@ -16,7 +20,9 @@ import {
 
 import {
   auth,
+  db,
 } from "../lib/firebase";
+import { normalizeEmail } from "../lib/userRoles";
 
 type Props = {
   children: React.ReactNode;
@@ -42,15 +48,18 @@ export default function AuthGuard({
 
         auth,
 
-        (user) => {
+        async (user) => {
 
           if (
             pathname === "/login"
           ) {
             if (user) {
-              router.replace(
-                "/"
-              );
+              const email = normalizeEmail(user.email);
+              const accessDoc = email
+                ? await getDoc(doc(db, "userAccess", email))
+                : null;
+
+              router.replace(accessDoc?.exists() ? "/" : "/no-access");
             }
 
             setLoading(false);
@@ -68,6 +77,21 @@ export default function AuthGuard({
           }
 
           else {
+            if (pathname === "/no-access") {
+              setLoading(false);
+              return;
+            }
+
+            const email = normalizeEmail(user.email);
+            const accessDoc = email
+              ? await getDoc(doc(db, "userAccess", email))
+              : null;
+
+            if (!accessDoc?.exists()) {
+              router.replace("/no-access");
+              setLoading(false);
+              return;
+            }
 
             setLoading(false);
 

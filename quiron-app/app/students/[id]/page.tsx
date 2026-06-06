@@ -141,6 +141,26 @@ function formatEvaluationDate(
   return "Fecha pendiente";
 }
 
+function formatAttendanceDateTime(
+  value: AttendanceRecord["markedAt"]
+) {
+  if (!value) return "Fecha pendiente";
+
+  if (value instanceof Timestamp) {
+    return value.toDate().toLocaleString("es-CL");
+  }
+
+  if (value instanceof Date) {
+    return value.toLocaleString("es-CL");
+  }
+
+  if ("seconds" in value && typeof value.seconds === "number") {
+    return new Date(value.seconds * 1000).toLocaleString("es-CL");
+  }
+
+  return "Fecha pendiente";
+}
+
 function fileSafeName(value: string) {
 
   return value
@@ -1555,6 +1575,10 @@ export default function StudentDetail({
       ["Rol", student.role || "-"],
       ["Modalidad base", student.modality || "-"],
       ["Tutor", studentTutorLabel(student) || "-"],
+      [
+        "Tutores con acceso",
+        (student.tutorEmails || []).join(", ") || "Sin correos asignados",
+      ],
       ["Promedio", student.average || "-"],
     ]);
     noteBlock(
@@ -1906,6 +1930,11 @@ export default function StudentDetail({
               ["Modalidad", student.modality || "-"],
               ["Estado académico", academicStatus.label],
               ["Tutor", studentTutorLabel(student) || "-"],
+              [
+                "Tutores con acceso",
+                (student.tutorEmails || []).join(", ") ||
+                  "Sin correos asignados",
+              ],
             ].map(([label, value]) => (
               <div
                 key={label}
@@ -2094,6 +2123,10 @@ export default function StudentDetail({
                           : ""}
                       </p>
                     )}
+                    <p className="mt-2 text-xs font-semibold text-slate-400">
+                      Marcado por {record.markedBy || "-"} ·{" "}
+                      {formatAttendanceDateTime(record.markedAt)}
+                    </p>
                   </div>
                   <p className="text-sm font-bold text-slate-500">
                     {formatRotationDate(record.date)}

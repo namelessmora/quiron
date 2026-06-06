@@ -90,7 +90,7 @@ export default function Sidebar() {
 
   ].filter((link) => link.visible);
 
-  if (pathname === "/login") {
+  if (pathname === "/login" || pathname === "/no-access") {
     return null;
   }
 
