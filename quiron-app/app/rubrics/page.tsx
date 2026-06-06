@@ -35,6 +35,21 @@ type CriterionDraft = {
 
 type OptionPreset = "standard" | "enac" | "simple";
 
+const presetLabels: Record<OptionPreset, string> = {
+  standard: "Excelente / Bueno / Regular / Insuficiente / No aplica",
+  enac: "Logrado / No logrado / No aplica",
+  simple: "Cumple / No cumple / No aplica",
+};
+
+const presetHelpers: Record<OptionPreset, string> = {
+  standard:
+    "Útil para pautas con desempeño gradual. Es la opción más común.",
+  enac:
+    "Útil cuando la pauta sólo distingue si el criterio se logra o no.",
+  simple:
+    "Útil para listas breves de chequeo.",
+};
+
 const optionPresets: Record<OptionPreset, RubricOption[]> = {
   standard: [
     {
@@ -239,6 +254,28 @@ export default function RubricsPage() {
     );
   }
 
+  function selectPreset(nextPreset: OptionPreset) {
+    setPreset(nextPreset);
+
+    if (nextPreset === "enac") {
+      setMaxScore("7");
+      setScale("60");
+      setPassingScore("4");
+      return;
+    }
+
+    if (nextPreset === "simple") {
+      setMaxScore("1");
+      setScale("60");
+      setPassingScore("4");
+      return;
+    }
+
+    setMaxScore("5");
+    setScale("60");
+    setPassingScore("4");
+  }
+
   async function importRubricFile(file?: File) {
     if (!file) return;
 
@@ -412,10 +449,11 @@ export default function RubricsPage() {
 
           <label className="mb-5 block rounded-lg border border-dashed border-indigo-200 bg-indigo-50 p-4">
             <span className="block text-sm font-bold text-indigo-800">
-              Cargar archivo de pauta
+              1. Cargar archivo de pauta
             </span>
             <span className="mt-1 block text-sm text-indigo-700">
-              Convierte Excel, CSV o TXT en criterios editables antes de guardar.
+              Sube un Excel, CSV o TXT. La app extrae los criterios y luego
+              puedes revisarlos.
             </span>
             <input
               type="file"
@@ -429,94 +467,151 @@ export default function RubricsPage() {
           </label>
 
           <div className="grid gap-3">
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Nombre de pauta"
-              className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-            />
+            <label className="grid gap-1">
+              <span className="text-sm font-semibold text-slate-700">
+                Nombre de la pauta
+              </span>
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Ej: Pauta RX UBO 2026"
+                className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+              />
+            </label>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <select
-                value={university}
-                onChange={(event) => setUniversity(event.target.value)}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-              >
-                {universityOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
+              <label className="grid gap-1">
+                <span className="text-sm font-semibold text-slate-700">
+                  Universidad
+                </span>
+                <select
+                  value={university}
+                  onChange={(event) => setUniversity(event.target.value)}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                >
+                  {universityOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-              <select
-                value={area}
-                onChange={(event) => setArea(event.target.value)}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-              >
-                {areaOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
+              <label className="grid gap-1">
+                <span className="text-sm font-semibold text-slate-700">
+                  Área
+                </span>
+                <select
+                  value={area}
+                  onChange={(event) => setArea(event.target.value)}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                >
+                  {areaOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-4">
-              <select
-                value={preset}
-                onChange={(event) =>
-                  setPreset(event.target.value as OptionPreset)
-                }
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 sm:col-span-2"
-              >
-                <option value="standard">Escala 5 niveles</option>
-                <option value="enac">Logrado / No logrado</option>
-                <option value="simple">Cumple / No cumple</option>
-              </select>
-
-              <input
-                value={scale}
-                onChange={(event) => setScale(event.target.value)}
-                type="number"
-                min="1"
-                max="100"
-                placeholder="Exigencia"
-                className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-              />
-
-              <input
-                value={maxScore}
-                onChange={(event) => setMaxScore(event.target.value)}
-                type="number"
-                min="1"
-                placeholder="Puntaje máx."
-                className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-              />
+            <div className="rounded-lg border border-slate-200 p-4">
+              <p className="text-sm font-bold text-slate-900">
+                2. ¿Cómo se responderá cada criterio?
+              </p>
+              <div className="mt-3 grid gap-2">
+                {(["standard", "enac", "simple"] as OptionPreset[]).map(
+                  (option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => selectPreset(option)}
+                      className={`rounded-lg border px-4 py-3 text-left transition ${
+                        preset === option
+                          ? "border-indigo-300 bg-indigo-50"
+                          : "border-slate-200 bg-white hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="block text-sm font-bold text-slate-900">
+                        {presetLabels[option]}
+                      </span>
+                      <span className="mt-1 block text-sm text-slate-500">
+                        {presetHelpers[option]}
+                      </span>
+                    </button>
+                  )
+                )}
+              </div>
             </div>
 
-            <input
-              value={passingScore}
-              onChange={(event) => setPassingScore(event.target.value)}
-              type="number"
-              min="1"
-              max="7"
-              step="0.1"
-              placeholder="Nota mínima"
-              className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-            />
+            <details className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <summary className="cursor-pointer text-sm font-bold text-slate-700">
+                Ajustes avanzados de nota
+              </summary>
+              <p className="mt-2 text-sm text-slate-500">
+                Puedes dejarlos tal como están. Sólo cámbialos si la universidad
+                indica una exigencia o puntaje especial.
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-slate-700">
+                    Exigencia para aprobar (%)
+                  </span>
+                  <input
+                    value={scale}
+                    onChange={(event) => setScale(event.target.value)}
+                    type="number"
+                    min="1"
+                    max="100"
+                    className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </label>
+
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-slate-700">
+                    Puntaje máximo por criterio
+                  </span>
+                  <input
+                    value={maxScore}
+                    onChange={(event) => setMaxScore(event.target.value)}
+                    type="number"
+                    min="1"
+                    className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </label>
+
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-slate-700">
+                    Nota mínima aprobatoria
+                  </span>
+                  <input
+                    value={passingScore}
+                    onChange={(event) => setPassingScore(event.target.value)}
+                    type="number"
+                    min="1"
+                    max="7"
+                    step="0.1"
+                    className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </label>
+              </div>
+            </details>
           </div>
 
           <div className="mt-6 rounded-lg border border-slate-100 bg-slate-50 p-4">
             <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-              Criterios
+              3. Criterios
             </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Si el archivo no quedó perfecto, puedes agregar o eliminar
+              criterios antes de guardar.
+            </p>
 
             <div className="mt-3 grid gap-3">
               <input
                 value={dimension}
                 onChange={(event) => setDimension(event.target.value)}
-                placeholder="Dimensión, por ejemplo Bioseguridad"
+                placeholder="Grupo o dimensión, por ejemplo Bioseguridad"
                 className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
               />
 
