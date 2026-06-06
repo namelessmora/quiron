@@ -23,7 +23,7 @@ import { useTeacherProfiles } from "../../hooks/useTeacherProfiles";
 import { writeAuditLog } from "../../lib/audit";
 import {
   Rubric,
-  rubrics,
+  rubrics as baseRubrics,
 } from "../../data/rubrics";
 import {
   areaOptions,
@@ -41,6 +41,10 @@ import {
   validStudentAreas,
   validRotations,
 } from "../../lib/rotations";
+import {
+  loadStoredRubrics,
+  StoredRubric,
+} from "../../lib/rubricStore";
 import { validateStudentInput } from "../../lib/studentValidation";
 import {
   canUserAccessStudent,
@@ -233,10 +237,11 @@ function studentAreas(
 }
 
 function findSuggestedRubric(
-  student: Student
+  student: Student,
+  availableRubrics: Rubric[]
 ) {
 
-  return rubrics.find((rubric) =>
+  return availableRubrics.find((rubric) =>
     rubricMatchesStudent(rubric, student)
   );
 }
@@ -425,6 +430,8 @@ export default function StudentDetail({
 
   const [evaluations, setEvaluations] =
     useState<Evaluation[]>([]);
+  const [storedRubrics, setStoredRubrics] =
+    useState<StoredRubric[]>([]);
   const [attendanceRecords, setAttendanceRecords] =
     useState<AttendanceRecord[]>([]);
 
@@ -659,6 +666,10 @@ export default function StudentDetail({
 
       const docSnap =
         await getDoc(docRef);
+      const nextStoredRubrics =
+        await loadStoredRubrics();
+
+      setStoredRubrics(nextStoredRubrics);
 
       if (docSnap.exists()) {
 
@@ -698,8 +709,13 @@ export default function StudentDetail({
     });
   }, [loadStudent]);
 
+  const availableRubrics = useMemo(
+    () => [...baseRubrics, ...storedRubrics],
+    [storedRubrics]
+  );
+
   const selectedRubric =
-    rubrics.find(
+    availableRubrics.find(
       (rubric) =>
         rubric.id === selectedRubricId
     );
@@ -707,23 +723,23 @@ export default function StudentDetail({
   const compatibleRubrics = useMemo(
     () =>
       student
-        ? rubrics.filter((rubric) =>
+        ? availableRubrics.filter((rubric) =>
             rubricMatchesStudent(rubric, student)
           )
         : [],
-    [student]
+    [availableRubrics, student]
   );
 
   const otherRubrics = useMemo(
     () =>
-      rubrics.filter(
+      availableRubrics.filter(
         (rubric) =>
           !compatibleRubrics.some(
             (compatibleRubric) =>
               compatibleRubric.id === rubric.id
           )
       ),
-    [compatibleRubrics]
+    [availableRubrics, compatibleRubrics]
   );
 
   const availableRubricsByArea = useMemo(() => {
@@ -846,8 +862,8 @@ export default function StudentDetail({
     if (student) {
       const suggestedRubric =
         rubricId
-          ? rubrics.find((rubric) => rubric.id === rubricId)
-          : findSuggestedRubric(student);
+          ? availableRubrics.find((rubric) => rubric.id === rubricId)
+          : findSuggestedRubric(student, availableRubrics);
 
       setSelectedRubricId(
         suggestedRubric?.id || ""
@@ -866,7 +882,7 @@ export default function StudentDetail({
     rubricId: string
   ) {
 
-    const rubric = rubrics.find(
+    const rubric = availableRubrics.find(
       (currentRubric) =>
         currentRubric.id === rubricId
     );

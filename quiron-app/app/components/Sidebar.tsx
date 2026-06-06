@@ -47,9 +47,15 @@ export default function Sidebar() {
     },
 
     {
-      label: "Alumnos activos",
+      label: "Alumnos",
       href: "/students",
       visible: true,
+    },
+
+    {
+      label: "Pautas",
+      href: "/rubrics",
+      visible: permissions.canViewAllStudents,
     },
 
     {
@@ -65,15 +71,15 @@ export default function Sidebar() {
     },
 
     {
-      label: "Alumnos finalizados",
-      href: "/students?view=finished",
-      visible: permissions.canViewAllStudents,
-    },
-
-    {
       label: "Avisos",
       href: "/alerts",
       visible: true,
+    },
+
+    {
+      label: "Histórico",
+      href: "/history",
+      visible: permissions.canViewAllStudents,
     },
 
     {
@@ -122,7 +128,8 @@ export default function Sidebar() {
                 ? pathname === "/students" &&
                   searchParams.get("view") === "finished"
                 : pathname === link.href &&
-                  searchParams.get("view") !== "finished";
+                  (pathname !== "/students" ||
+                    searchParams.get("view") !== "finished");
 
             return (
 

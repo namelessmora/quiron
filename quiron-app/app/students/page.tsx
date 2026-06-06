@@ -9,7 +9,7 @@ import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
 import StudentModal from "../components/StudentModal";
 import { useCurrentUserPermissions } from "../hooks/useCurrentUserPermissions";
 import {
-  rubrics,
+  rubrics as baseRubrics,
   type Rubric,
 } from "../data/rubrics";
 import {
@@ -30,6 +30,10 @@ import {
   isStudentFinalized,
   validStudentAreas,
 } from "../lib/rotations";
+import {
+  loadStoredRubrics,
+  StoredRubric,
+} from "../lib/rubricStore";
 import {
   canUserAccessStudent,
   studentTutorEmails,
@@ -79,8 +83,12 @@ function areaMatchesRubric(area: string, rubric: Rubric) {
   });
 }
 
-function evaluationMatchesArea(evaluation: EvaluationSummary, area: string) {
-  const rubric = rubrics.find(
+function evaluationMatchesArea(
+  evaluation: EvaluationSummary,
+  area: string,
+  availableRubrics: Rubric[]
+) {
+  const rubric = availableRubrics.find(
     (currentRubric) =>
       currentRubric.id === evaluation.rubricId ||
       currentRubric.name === evaluation.rubricName
@@ -94,6 +102,7 @@ export default function StudentsPage() {
   const { user, role, permissions } =
     useCurrentUserPermissions();
   const [students, setStudents] = useState<Student[]>([]);
+  const [storedRubrics, setStoredRubrics] = useState<StoredRubric[]>([]);
   const [evaluationsByStudent, setEvaluationsByStudent] = useState<
     Record<string, EvaluationSummary[]>
   >({});
@@ -107,7 +116,9 @@ export default function StudentsPage() {
   const [tutorFilter, setTutorFilter] = useState("");
   const [academicStatusFilter, setAcademicStatusFilter] = useState("");
   const studentTab =
-    searchParams.get("view") === "finished"
+    searchParams.get("view") === "all"
+      ? "all"
+      : searchParams.get("view") === "finished"
       ? "finished"
       : "active";
   const [loading, setLoading] = useState(true);
@@ -120,6 +131,7 @@ export default function StudentsPage() {
       setError("");
 
       const snapshot = await getDocs(collection(db, "students"));
+      const nextStoredRubrics = await loadStoredRubrics();
 
       const data = snapshot.docs
         .map((studentDoc) => ({
@@ -152,6 +164,7 @@ export default function StudentsPage() {
       }, {});
 
       setStudents(data);
+      setStoredRubrics(nextStoredRubrics);
       setEvaluationsByStudent(nextEvaluationsByStudent);
     } catch (loadError) {
       console.error(loadError);
@@ -160,6 +173,11 @@ export default function StudentsPage() {
       setLoading(false);
     }
   }, []);
+
+  const availableRubrics = useMemo(
+    () => [...baseRubrics, ...storedRubrics],
+    [storedRubrics]
+  );
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -185,7 +203,9 @@ export default function StudentsPage() {
     return students.filter((student) =>
       canUserAccessStudent(role, user?.email, student) &&
       (!permissions.canViewAllStudents ||
-        (studentTab === "finished"
+        (studentTab === "all"
+          ? true
+          : studentTab === "finished"
           ? isStudentFinalized(student)
           : !isStudentFinalized(student))) &&
       [
@@ -209,10 +229,18 @@ export default function StudentsPage() {
         !areaFilter ||
         (areaEvaluationFilter === "with"
           ? (evaluationsByStudent[student.id] || []).some((evaluation) =>
-              evaluationMatchesArea(evaluation, areaFilter)
+              evaluationMatchesArea(
+                evaluation,
+                areaFilter,
+                availableRubrics
+              )
             )
           : !(evaluationsByStudent[student.id] || []).some((evaluation) =>
-              evaluationMatchesArea(evaluation, areaFilter)
+              evaluationMatchesArea(
+                evaluation,
+                areaFilter,
+                availableRubrics
+              )
             ))) &&
       (!careerFilter || student.career === careerFilter) &&
       (!roleFilter || student.role === roleFilter) &&
@@ -227,6 +255,7 @@ export default function StudentsPage() {
     academicStatusFilter,
     areaFilter,
     areaEvaluationFilter,
+    availableRubrics,
     careerFilter,
     evaluationsByStudent,
     modalityFilter,
@@ -257,6 +286,14 @@ export default function StudentsPage() {
         (student) =>
           canUserAccessStudent(role, user?.email, student) &&
           isStudentFinalized(student)
+      ).length,
+    [role, students, user?.email]
+  );
+
+  const allStudentsCount = useMemo(
+    () =>
+      students.filter((student) =>
+        canUserAccessStudent(role, user?.email, student)
       ).length,
     [role, students, user?.email]
   );
@@ -357,20 +394,24 @@ export default function StudentsPage() {
             key: "active",
             label: "Rotando",
             count: activeStudentsCount,
+            href: "/students",
           },
           {
             key: "finished",
             label: "Finalizados",
             count: finishedStudentsCount,
+            href: "/students?view=finished",
+          },
+          {
+            key: "all",
+            label: "Todos",
+            count: allStudentsCount,
+            href: "/students?view=all",
           },
         ].map((tab) => (
           <Link
             key={tab.key}
-            href={
-              tab.key === "finished"
-                ? "/students?view=finished"
-                : "/students"
-            }
+            href={tab.href}
             className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
               studentTab === tab.key
                 ? "bg-indigo-600 text-white"

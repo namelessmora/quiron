@@ -41,6 +41,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /rubrics/{rubricId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
     match /students/{studentId} {
       allow read: if isAdmin() ||
         (isTeacher() && isAssignedTutor(resource.data)) ||
